@@ -40,8 +40,8 @@ try {
     if (Test-Path -LiteralPath (Join-Path $assetRoot 'ca.crt')) { Remove-Item -LiteralPath (Join-Path $assetRoot 'ca.crt') }
     $settings = [ordered]@{
         site_name = 'Nekopass'; panel_url = 'https://YOUR-PANEL.example.com:8443'; agent_host = 'YOUR-PANEL.example.com'; agent_port = 9443; agent_transport = 'tls'
-        installer_url = 'https://github.com/hajidishu/nekopass/releases/latest/download/install-agent.sh'
-        release_base_url = 'https://github.com/hajidishu/nekopass/releases/download'; agent_version = 'latest'
+        installer_url = 'https://github.com/musicclub1563/nekopass/releases/latest/download/install-agent.sh'
+        release_base_url = 'https://github.com/musicclub1563/nekopass/releases/download'; agent_version = 'latest'
         install_token_minutes = 30
     }
     [IO.File]::WriteAllText((Join-Path $repoRoot 'dist/oss/settings.example.json'), ($settings | ConvertTo-Json) + "`n", $utf8)

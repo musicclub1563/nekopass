@@ -48,7 +48,7 @@ Nekopass是一个开源免费的转发面板，设计参考了nyanpass，但是�
 Debian / Ubuntu，amd64 / arm64：
 
 ```bash
-wget https://github.com/hajidishu/nekopass/releases/latest/download/install-panel.sh -O install-panel.sh && sudo bash install-panel.sh
+wget https://github.com/musicclub1563/nekopass/releases/latest/download/install-panel.sh -O install-panel.sh && sudo bash install-panel.sh
 ```
 
 安装完成显示管理员账号和随机密码。网页默认 `8080`，节点控制端口 `9443`；网页 HTTPS 自行配置 Nginx。
@@ -83,7 +83,7 @@ sudo nekopassctl panel reset-password # 重置管理员密码
 
 很显然readme.md放不下这么多字，所以我们创建了一个文档站，你可以在这里了解如何使用此软件
 
-https://hajidishu.github.io/nekopass/
+https://musicclub1563.github.io/nekopass/
 
 >文档由ai总结，目前缺少人工润色，但是不影响你查看
 

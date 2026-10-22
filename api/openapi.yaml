@@ -369,7 +369,7 @@ paths:
               properties:
                 version: {type: string, example: v0.10.0}
       responses:
-        '200': {description: 'generation, version and queued state; Agent protocol 9 and installed updater required. Update progress appears in admin nodes only. Uses fixed hajidishu/nekopass Releases; preserves node identity and quota state.'}
+        '200': {description: 'generation, version and queued state; Agent protocol 9 and installed updater required. Update progress appears in admin nodes only. Uses fixed musicclub1563/nekopass Releases; preserves node identity and quota state.'}
         '403': {$ref: '#/components/responses/Error'}
         '409': {description: Offline/legacy node, pending task or version conflict}
   /admin/nodes/{id}/protocols:

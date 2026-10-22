@@ -6,11 +6,11 @@ write_manager_payload() { return 1; }
 # PACKAGED_MANAGER
 write_updater_payload() { return 1; }
 # PACKAGED_UPDATER
-DEFAULT_DOWNLOAD_BASE='https://github.com/hajidishu/nekopass/releases/download'
+DEFAULT_DOWNLOAD_BASE='https://github.com/musicclub1563/nekopass/releases/download'
 RELEASE_VERSION='v0.19.0'; DOWNLOAD_BASE=$DEFAULT_DOWNLOAD_BASE; PACKAGE_URL=''; PACKAGE=''; SOURCE_DIR=''
 SERVICE='nekopass'; HOST=''; AGENT_HOST=''; AGENT_PORT=''; HTTP_PORT=8080; GRPC_PORT=9443; DB_PORT=''; PG_VERSION=''
 PG_SOURCE=system; ADMIN=admin; SITE=Nekopass; TLS_MODE=plain; TLS_CERT=''; TLS_KEY=''
-AGENT_INSTALLER='https://github.com/hajidishu/nekopass/releases/latest/download/install-agent.sh'; AGENT_RELEASES='https://github.com/hajidishu/nekopass/releases/download'; FIREWALL=auto; YES=0; SKIP_DEPS=0; DRY_RUN=0; REINSTALL=0; WORK=''
+AGENT_INSTALLER='https://github.com/musicclub1563/nekopass/releases/latest/download/install-agent.sh'; AGENT_RELEASES='https://github.com/musicclub1563/nekopass/releases/download'; FIREWALL=auto; YES=0; SKIP_DEPS=0; DRY_RUN=0; REINSTALL=0; WORK=''
 die() { printf '[nekopass] %s\n' "$*" >&2; exit 1; }
 log() { printf '[nekopass] %s\n' "$*"; }
 postgres_run() { (cd / && runuser -u postgres -- "$@"); }
@@ -20,7 +20,7 @@ Nekopass 面板一键安装（Debian/Ubuntu，原生 systemd，以 root 执行�
 
   bash install-panel.sh                           交互式安装
   bash install-panel.sh --package /path/panel.tar.gz
-  bash install-panel.sh --download-base https://github.com/hajidishu/nekopass/releases/download
+  bash install-panel.sh --download-base https://github.com/musicclub1563/nekopass/releases/download
 
   --package PATH           本地面板发布包
   --package-url URL        直接下载 HTTPS 发布包
