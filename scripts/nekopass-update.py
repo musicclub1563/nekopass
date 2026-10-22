@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Native service updates from hajidishu/nekopass GitHub Releases."""
+"""Native service updates from musicclub1563/nekopass GitHub Releases."""
 import argparse
 import fcntl
 import json
@@ -17,7 +17,7 @@ import time
 import urllib.parse
 import urllib.request
 
-REPOSITORY = 'hajidishu/nekopass'
+REPOSITORY = 'musicclub1563/nekopass'
 BASE = 'https://github.com/' + REPOSITORY + '/releases/download'
 TAG = re.compile(r'^v([0-9]{1,8})\.([0-9]{1,8})\.([0-9]{1,8})$')
 SERVICE = re.compile(r'^nekopass(?:-agent(?:-[a-z0-9]{1,16})?|-panel-[a-z0-9]{1,16})?$')

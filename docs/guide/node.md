@@ -16,8 +16,8 @@
 
 | 设置 | 示例 |
 | --- | --- |
-| 安装脚本地址 | `https://github.com/hajidishu/nekopass/releases/latest/download/install-agent.sh` |
-| 版本下载根地址 | `https://github.com/hajidishu/nekopass/releases/download` |
+| 安装脚本地址 | `https://github.com/musicclub1563/nekopass/releases/latest/download/install-agent.sh` |
+| 版本下载根地址 | `https://github.com/musicclub1563/nekopass/releases/download` |
 | Agent 版本 | `latest`（最新正式版，也可填写版本号） |
 
 节点连接信息由安装参数写入 `/etc/nekopass/agent.env`，只需 `NEKOPASS_SERVER` 和 `NEKOPASS_NODE_TOKEN`。规则、限速等运行配置通过 gRPC 下发；节点无需连接网页端口。

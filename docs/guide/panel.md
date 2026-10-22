@@ -17,7 +17,7 @@ ARM64 使用 `nekopass-panel-linux-arm64.tar.gz`。
 从 GitHub Releases 下载：
 
 ```bash
-wget https://github.com/hajidishu/nekopass/releases/latest/download/install-panel.sh -O install-panel.sh && sudo bash install-panel.sh
+wget https://github.com/musicclub1563/nekopass/releases/latest/download/install-panel.sh -O install-panel.sh && sudo bash install-panel.sh
 ```
 
 安装器可选择系统源或 PostgreSQL 官方源及数据库主版本，并创建数据库、配置 systemd、生成管理员随机密码和开启自启。支持 PostgreSQL 14 或以上。

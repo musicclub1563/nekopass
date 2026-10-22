@@ -9,7 +9,7 @@ import {loadSite} from '../site'
 type SMTP={host:string;port:number;security:string;username:string;password:string;from:string;from_name:string}
 type TelegramSettings={enabled:boolean;token:string;admin_ids:number[];notification_chat_ids:number[];statistics_days:number}
 type Settings={telegram:TelegramSettings;registration_email_verification:boolean;force_invite:boolean;terms_url:string;privacy_url:string;registration_enabled:boolean;captcha_mode:string;smtp:SMTP;referral_enabled:boolean;referral_mode:string;referral_rate:string;site_name:string;panel_url:string;agent_host:string;agent_port:number;agent_transport:string;installer_url:string;release_base_url:string;agent_version:string;install_token_minutes:number;proxy_trusted_cidrs:string[];target_deny_cidrs:string[]}
-const form=reactive<Settings>({telegram:{enabled:false,token:'',admin_ids:[],notification_chat_ids:[],statistics_days:7},registration_email_verification:true,force_invite:false,terms_url:'',privacy_url:'',registration_enabled:false,captcha_mode:'image',smtp:{host:'',port:587,security:'starttls',username:'',password:'',from:'',from_name:''},referral_enabled:false,referral_mode:'first',referral_rate:'15',site_name:'Nekopass',panel_url:'',agent_host:'',agent_port:9443,agent_transport:'tls',installer_url:'https://github.com/hajidishu/nekopass/releases/latest/download/install-agent.sh',release_base_url:'https://github.com/hajidishu/nekopass/releases/download',agent_version:'latest',install_token_minutes:30,proxy_trusted_cidrs:[],target_deny_cidrs:[]})
+const form=reactive<Settings>({telegram:{enabled:false,token:'',admin_ids:[],notification_chat_ids:[],statistics_days:7},registration_email_verification:true,force_invite:false,terms_url:'',privacy_url:'',registration_enabled:false,captcha_mode:'image',smtp:{host:'',port:587,security:'starttls',username:'',password:'',from:'',from_name:''},referral_enabled:false,referral_mode:'first',referral_rate:'15',site_name:'Nekopass',panel_url:'',agent_host:'',agent_port:9443,agent_transport:'tls',installer_url:'https://github.com/musicclub1563/nekopass/releases/latest/download/install-agent.sh',release_base_url:'https://github.com/musicclub1563/nekopass/releases/download',agent_version:'latest',install_token_minutes:30,proxy_trusted_cidrs:[],target_deny_cidrs:[]})
 watch(()=>form.referral_enabled,value=>{if(!value)form.force_invite=false})
 const proxyTrustText=ref(''),targetDenyText=ref(''),telegramAdmins=ref(''),telegramChats=ref('')
 const telegramStatus=ref<{state:string;username?:string;error?:string}|null>(null)
@@ -155,8 +155,8 @@ async function copyKey(){try{await copyText(shownKey.value);ElMessage.success('�
             <el-form label-position="top" @submit.prevent="save">
               <div class="form-section-title">节点一键安装</div>
               <p class="field-tip">一键安装始终可用。默认从 GitHub Releases 下载，也可修改为自己的 HTTPS 下载源。</p>
-              <el-form-item label="安装脚本地址"><el-input v-model="form.installer_url" placeholder="https://github.com/hajidishu/nekopass/releases/latest/download/install-agent.sh" /></el-form-item>
-              <el-form-item label="Agent 版本下载根地址"><el-input v-model="form.release_base_url" placeholder="https://github.com/hajidishu/nekopass/releases/download" /></el-form-item>
+              <el-form-item label="安装脚本地址"><el-input v-model="form.installer_url" placeholder="https://github.com/musicclub1563/nekopass/releases/latest/download/install-agent.sh" /></el-form-item>
+              <el-form-item label="Agent 版本下载根地址"><el-input v-model="form.release_base_url" placeholder="https://github.com/musicclub1563/nekopass/releases/download" /></el-form-item>
               <div class="form-grid"><el-form-item label="Agent 版本"><el-input v-model="form.agent_version" placeholder="latest" /></el-form-item>
               </div>
             </el-form>
