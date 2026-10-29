@@ -114,7 +114,7 @@ func run() error {
 		}
 	}
 	httpServer := &http.Server{Addr: *httpAddr, Handler: server.Handler(http.FileServer(http.Dir(*web))), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
-	grpcOptions := []grpc.ServerOption{grpc.MaxRecvMsgSize(16 << 20), grpc.MaxSendMsgSize(16 << 20), grpc.KeepaliveParams(keepalive.ServerParameters{Time: 30 * time.Second, Timeout: 10 * time.Second})}
+	grpcOptions := []grpc.ServerOption{grpc.MaxRecvMsgSize(control.MaxControlMessageBytes), grpc.MaxSendMsgSize(control.MaxControlMessageBytes), grpc.KeepaliveParams(keepalive.ServerParameters{Time: 30 * time.Second, Timeout: 10 * time.Second})}
 	// Legacy certificate variables apply only to the separate Agent listener.
 	// New installations may terminate gRPC TLS at Nginx as well.
 	certFile, keyFile := os.Getenv("NEKOPASS_GRPC_TLS_CERT"), os.Getenv("NEKOPASS_GRPC_TLS_KEY")

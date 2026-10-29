@@ -8,6 +8,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AllRuleUsage struct {
+	NodeID  int64 `json:"node_id"`
+	RuleID  int64 `json:"rule_id"`
+	UserID  int64 `json:"user_id"`
+	Traffic int64 `json:"traffic"`
+}
+
 type CurrentGrant struct {
 	NodeID         int64 `json:"node_id"`
 	UserID         int64 `json:"user_id"`
@@ -18,6 +25,34 @@ type CurrentGrant struct {
 	UnlimitedSpent int64 `json:"unlimited_spent"`
 	UnlimitedOpen  bool  `json:"unlimited_open"`
 	QuotaEpoch     int64 `json:"quota_epoch"`
+	ChargedBytes   int64 `json:"charged_bytes"`
+}
+
+type DeletedNode struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	DeletedBy pgtype.Int8        `json:"deleted_by"`
+}
+
+type DeletedNodeGrant struct {
+	NodeID         int64 `json:"node_id"`
+	UserID         int64 `json:"user_id"`
+	Issued         int64 `json:"issued"`
+	Spent          int64 `json:"spent"`
+	Released       int64 `json:"released"`
+	Traffic        int64 `json:"traffic"`
+	UnlimitedSpent int64 `json:"unlimited_spent"`
+	UnlimitedOpen  bool  `json:"unlimited_open"`
+	QuotaEpoch     int64 `json:"quota_epoch"`
+	ChargedBytes   int64 `json:"charged_bytes"`
+}
+
+type DeletedNodeRuleUsage struct {
+	NodeID  int64 `json:"node_id"`
+	RuleID  int64 `json:"rule_id"`
+	UserID  int64 `json:"user_id"`
+	Traffic int64 `json:"traffic"`
 }
 
 type Grant struct {
@@ -30,6 +65,7 @@ type Grant struct {
 	UnlimitedSpent int64 `json:"unlimited_spent"`
 	UnlimitedOpen  bool  `json:"unlimited_open"`
 	QuotaEpoch     int64 `json:"quota_epoch"`
+	ChargedBytes   int64 `json:"charged_bytes"`
 }
 
 type Node struct {
@@ -76,6 +112,9 @@ type Node struct {
 	AcmeAck              int64              `json:"acme_ack"`
 	AgentVersion         string             `json:"agent_version"`
 	UpdateSupported      bool               `json:"update_supported"`
+	IngressRate          int32              `json:"ingress_rate"`
+	EgressRate           int32              `json:"egress_rate"`
+	RandomConfig         []byte             `json:"random_config"`
 }
 
 type NodeAcmeAccount struct {
@@ -104,19 +143,23 @@ type NodeDdn struct {
 }
 
 type NodeGroup struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`
-	SortOrder   int32  `json:"sort_order"`
-	Strategy    string `json:"strategy"`
+	ID                    int64  `json:"id"`
+	Name                  string `json:"name"`
+	Description           string `json:"description"`
+	Enabled               bool   `json:"enabled"`
+	SortOrder             int32  `json:"sort_order"`
+	Strategy              string `json:"strategy"`
+	HealthIntervalSeconds int32  `json:"health_interval_seconds"`
+	HealthFailures        int32  `json:"health_failures"`
+	HealthSuccesses       int32  `json:"health_successes"`
 }
 
 type NodeGroupMember struct {
-	GroupID  int64 `json:"group_id"`
-	NodeID   int64 `json:"node_id"`
-	Weight   int32 `json:"weight"`
-	Priority int32 `json:"priority"`
+	GroupID  int64  `json:"group_id"`
+	NodeID   int64  `json:"node_id"`
+	Weight   int32  `json:"weight"`
+	Priority int32  `json:"priority"`
+	Role     string `json:"role"`
 }
 
 type NodeInstallTicket struct {
@@ -216,6 +259,7 @@ type Rule struct {
 	TrafficBaseline   int64       `json:"traffic_baseline"`
 	ConfigRevision    int64       `json:"config_revision"`
 	EgressNodeID      pgtype.Int8 `json:"egress_node_id"`
+	EgressGroupID     pgtype.Int8 `json:"egress_group_id"`
 }
 
 type RuleEvent struct {
@@ -231,6 +275,13 @@ type RuleGroup struct {
 	ID     int64  `json:"id"`
 	UserID int64  `json:"user_id"`
 	Name   string `json:"name"`
+}
+
+type RuleOutboundRoute struct {
+	RuleID       int64  `json:"rule_id"`
+	EgressNodeID int64  `json:"egress_node_id"`
+	Weight       int32  `json:"weight"`
+	Role         string `json:"role"`
 }
 
 type RuleUsage struct {
@@ -286,58 +337,68 @@ type UsageEvent struct {
 }
 
 type User struct {
-	ID                    int64              `json:"id"`
-	Username              string             `json:"username"`
-	PasswordHash          string             `json:"password_hash"`
-	IsAdmin               bool               `json:"is_admin"`
-	Enabled               bool               `json:"enabled"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	PlanID                pgtype.Int8        `json:"plan_id"`
-	PlanStartedAt         pgtype.Timestamptz `json:"plan_started_at"`
-	SubscriptionManaged   bool               `json:"subscription_managed"`
-	SubscriptionExpiresAt pgtype.Timestamptz `json:"subscription_expires_at"`
-	NextResetAt           pgtype.Timestamptz `json:"next_reset_at"`
-	ResetAnchorAt         pgtype.Timestamptz `json:"reset_anchor_at"`
-	ResetIndex            int32              `json:"reset_index"`
-	QuotaEpoch            int64              `json:"quota_epoch"`
-	SpeedBps              int64              `json:"speed_bps"`
-	QuotaBytes            int64              `json:"quota_bytes"`
-	MaxRules              int32              `json:"max_rules"`
-	MaxConnections        int64              `json:"max_connections"`
-	IpLimit               int32              `json:"ip_limit"`
-	RuleSpeedBps          int64              `json:"rule_speed_bps"`
-	RuleIpLimit           int32              `json:"rule_ip_limit"`
-	RuleConnectionLimit   int32              `json:"rule_connection_limit"`
-	ResourceExpiresAt     pgtype.Timestamptz `json:"resource_expires_at"`
-	TrafficBaseBytes      int64              `json:"traffic_base_bytes"`
-	ResourcesRevision     int64              `json:"resources_revision"`
+	ID                     int64              `json:"id"`
+	Username               string             `json:"username"`
+	PasswordHash           string             `json:"password_hash"`
+	IsAdmin                bool               `json:"is_admin"`
+	Enabled                bool               `json:"enabled"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	PlanID                 pgtype.Int8        `json:"plan_id"`
+	PlanStartedAt          pgtype.Timestamptz `json:"plan_started_at"`
+	SubscriptionManaged    bool               `json:"subscription_managed"`
+	SubscriptionExpiresAt  pgtype.Timestamptz `json:"subscription_expires_at"`
+	NextResetAt            pgtype.Timestamptz `json:"next_reset_at"`
+	ResetAnchorAt          pgtype.Timestamptz `json:"reset_anchor_at"`
+	ResetIndex             int32              `json:"reset_index"`
+	QuotaEpoch             int64              `json:"quota_epoch"`
+	SpeedBps               int64              `json:"speed_bps"`
+	QuotaBytes             int64              `json:"quota_bytes"`
+	MaxRules               int32              `json:"max_rules"`
+	MaxConnections         int64              `json:"max_connections"`
+	IpLimit                int32              `json:"ip_limit"`
+	RuleSpeedBps           int64              `json:"rule_speed_bps"`
+	RuleIpLimit            int32              `json:"rule_ip_limit"`
+	RuleConnectionLimit    int32              `json:"rule_connection_limit"`
+	ResourceExpiresAt      pgtype.Timestamptz `json:"resource_expires_at"`
+	TrafficBaseBytes       int64              `json:"traffic_base_bytes"`
+	ResourcesRevision      int64              `json:"resources_revision"`
+	ActualTrafficBaseBytes int64              `json:"actual_traffic_base_bytes"`
+	AutoRenewEnabled       bool               `json:"auto_renew_enabled"`
+	AutoRenewCycle         string             `json:"auto_renew_cycle"`
+	AutoRenewPriceCents    int64              `json:"auto_renew_price_cents"`
+	AutoRenewStatus        string             `json:"auto_renew_status"`
+	AutoRenewError         string             `json:"auto_renew_error"`
+	AutoRenewNextAttempt   pgtype.Timestamptz `json:"auto_renew_next_attempt"`
+	AutoRenewLastAttempt   pgtype.Timestamptz `json:"auto_renew_last_attempt"`
+	AutoRenewLastSuccess   pgtype.Timestamptz `json:"auto_renew_last_success"`
 }
 
 type UserEntitlement struct {
-	ID                  int64              `json:"id"`
-	Username            string             `json:"username"`
-	IsAdmin             bool               `json:"is_admin"`
-	AccountEnabled      bool               `json:"account_enabled"`
-	PlanID              pgtype.Int8        `json:"plan_id"`
-	PlanStartedAt       pgtype.Timestamptz `json:"plan_started_at"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	Enabled             pgtype.Bool        `json:"enabled"`
-	PlanEnabled         bool               `json:"plan_enabled"`
-	PlanName            string             `json:"plan_name"`
-	ExpiresAt           interface{}        `json:"expires_at"`
-	SpeedBps            int64              `json:"speed_bps"`
-	QuotaBytes          int64              `json:"quota_bytes"`
-	MaxRules            int32              `json:"max_rules"`
-	MaxConnections      int64              `json:"max_connections"`
-	IpLimit             int32              `json:"ip_limit"`
-	RuleSpeedBps        int64              `json:"rule_speed_bps"`
-	RuleIpLimit         int32              `json:"rule_ip_limit"`
-	RuleConnectionLimit int32              `json:"rule_connection_limit"`
-	QuotaEpoch          int64              `json:"quota_epoch"`
-	NextResetAt         pgtype.Timestamptz `json:"next_reset_at"`
-	SubscriptionManaged bool               `json:"subscription_managed"`
-	TrafficBaseBytes    int64              `json:"traffic_base_bytes"`
-	ResourcesRevision   int64              `json:"resources_revision"`
+	ID                     int64              `json:"id"`
+	Username               string             `json:"username"`
+	IsAdmin                bool               `json:"is_admin"`
+	AccountEnabled         bool               `json:"account_enabled"`
+	PlanID                 pgtype.Int8        `json:"plan_id"`
+	PlanStartedAt          pgtype.Timestamptz `json:"plan_started_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	Enabled                pgtype.Bool        `json:"enabled"`
+	PlanEnabled            bool               `json:"plan_enabled"`
+	PlanName               string             `json:"plan_name"`
+	ExpiresAt              interface{}        `json:"expires_at"`
+	SpeedBps               int64              `json:"speed_bps"`
+	QuotaBytes             int64              `json:"quota_bytes"`
+	MaxRules               int32              `json:"max_rules"`
+	MaxConnections         int64              `json:"max_connections"`
+	IpLimit                int32              `json:"ip_limit"`
+	RuleSpeedBps           int64              `json:"rule_speed_bps"`
+	RuleIpLimit            int32              `json:"rule_ip_limit"`
+	RuleConnectionLimit    int32              `json:"rule_connection_limit"`
+	QuotaEpoch             int64              `json:"quota_epoch"`
+	NextResetAt            pgtype.Timestamptz `json:"next_reset_at"`
+	SubscriptionManaged    bool               `json:"subscription_managed"`
+	TrafficBaseBytes       int64              `json:"traffic_base_bytes"`
+	ResourcesRevision      int64              `json:"resources_revision"`
+	ActualTrafficBaseBytes int64              `json:"actual_traffic_base_bytes"`
 }
 
 type UserNode struct {

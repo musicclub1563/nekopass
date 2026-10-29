@@ -16,9 +16,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const GrantWindow int64 = 256 << 20
+const MaxControlMessageBytes = 16 << 20
 
 type StreamServer struct {
 	pb.UnimplementedControlServer
@@ -74,6 +76,12 @@ func (s *StreamServer) Connect(stream pb.Control_ConnectServer) error {
 		if report.ProtocolVersion >= 12 {
 			result.ControlEndpoint = s.Server.controlEndpoint()
 		}
+		// gRPC checks its send limit after marshaling. Reject an oversized
+		// snapshot here rather than allocating that entire wire buffer on each
+		// reconnect before gRPC returns the same size-limit error.
+		if proto.Size(result) > MaxControlMessageBytes {
+			return status.Error(codes.ResourceExhausted, "node configuration exceeds 16 MiB; reduce rules or egress group size")
+		}
 		if e = stream.Send(result); e != nil {
 			return e
 		}
@@ -94,7 +102,8 @@ func (s *StreamServer) exchangeWithCredential(ctx context.Context, conn interfac
 	}
 	defer tx.Rollback(ctx)
 	var instance, currentHash string
-	e = tx.QueryRow(ctx, "SELECT instance_id,token_hash FROM nodes WHERE id=$1 FOR UPDATE", nodeID).Scan(&instance, &currentHash)
+	var previousProtocolVersion int32
+	e = tx.QueryRow(ctx, "SELECT instance_id,token_hash,protocol_version FROM nodes WHERE id=$1 FOR UPDATE", nodeID).Scan(&instance, &currentHash, &previousProtocolVersion)
 	if e != nil {
 		return nil, e
 	}
@@ -134,28 +143,44 @@ func (s *StreamServer) exchangeWithCredential(ctx context.Context, conn interfac
 			return nil, e
 		}
 	}
-	_, e = tx.Exec(ctx, "UPDATE nodes SET instance_id=$2,last_seen=now(),applied_revision=$3,sync_error=$4,active_connections=$5,protocol_version=$6,acme_ack=$7 WHERE id=$1", nodeID, r.InstanceId, r.AppliedRevision, truncate(r.Error, 4000), r.ActiveConnections, r.ProtocolVersion, r.AcmeAck)
+	_, e = tx.Exec(ctx, "UPDATE nodes SET instance_id=$2,last_seen=now(),first_connected_at=COALESCE(first_connected_at,now()),applied_revision=$3,sync_error=$4,active_connections=$5,protocol_version=$6,acme_ack=$7 WHERE id=$1", nodeID, r.InstanceId, r.AppliedRevision, truncate(r.Error, 4000), r.ActiveConnections, r.ProtocolVersion, r.AcmeAck)
 	if e != nil {
 		return nil, e
 	}
 	sort.Slice(r.Usage, func(i, j int) bool { return r.Usage[i].UserId < r.Usage[j].UserId })
+	if r.ProtocolVersion < 25 {
+		var incompatible bool
+		if e = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM grants WHERE node_id=$1 AND charged_bytes<>traffic)", nodeID).Scan(&incompatible); e != nil {
+			return nil, e
+		}
+		if incompatible && previousProtocolVersion >= 25 {
+			return nil, errors.New("upgrade Agent to preserve metered accounting")
+		}
+		if _, e = tx.Exec(ctx, "UPDATE grants SET charged_bytes=traffic WHERE node_id=$1 AND charged_bytes<>traffic", nodeID); e != nil {
+			return nil, e
+		}
+	}
 	for _, u := range r.Usage {
-		if u.QuotaEpoch < 0 || u.Spent < 0 || u.Released < 0 || u.Traffic < 0 || u.UnlimitedSpent < 0 || u.Spent > math.MaxInt64-u.UnlimitedSpent || u.Traffic > u.Spent+u.UnlimitedSpent {
+		charged := u.Traffic
+		if r.ProtocolVersion >= 25 {
+			charged = u.ChargedBytes
+		}
+		if u.QuotaEpoch < 0 || u.Spent < 0 || u.Released < 0 || u.Traffic < 0 || u.UnlimitedSpent < 0 || u.Spent > math.MaxInt64-u.UnlimitedSpent || charged < 0 || charged > u.Spent+u.UnlimitedSpent {
 			return nil, errors.New("invalid usage counters")
 		}
-		var issued, spent, released, traffic, unlimitedSpent int64
+		var issued, spent, released, traffic, unlimitedSpent, previousCharged int64
 		var unlimitedOpen bool
-		e = tx.QueryRow(ctx, "SELECT issued,spent,released,traffic,unlimited_spent,unlimited_open FROM grants WHERE node_id=$1 AND user_id=$2 AND quota_epoch=$3 FOR UPDATE", nodeID, u.UserId, u.QuotaEpoch).Scan(&issued, &spent, &released, &traffic, &unlimitedSpent, &unlimitedOpen)
+		e = tx.QueryRow(ctx, "SELECT issued,spent,released,traffic,unlimited_spent,unlimited_open,charged_bytes FROM grants WHERE node_id=$1 AND user_id=$2 AND quota_epoch=$3 FOR UPDATE", nodeID, u.UserId, u.QuotaEpoch).Scan(&issued, &spent, &released, &traffic, &unlimitedSpent, &unlimitedOpen, &previousCharged)
 		if errors.Is(e, pgx.ErrNoRows) && u.Spent == 0 && u.Released == 0 && u.Traffic == 0 && u.UnlimitedSpent == 0 {
 			continue
 		}
 		if e != nil {
 			return nil, e
 		}
-		if u.UnlimitedSpent < unlimitedSpent || (u.UnlimitedSpent > unlimitedSpent && !unlimitedOpen) || u.Spent < spent || u.Released < released || u.Traffic < traffic || u.Spent > issued || u.Released > issued-u.Spent {
+		if u.UnlimitedSpent < unlimitedSpent || (u.UnlimitedSpent > unlimitedSpent && !unlimitedOpen) || u.Spent < spent || u.Released < released || u.Traffic < traffic || charged < previousCharged || u.Spent > issued || u.Released > issued-u.Spent {
 			return nil, errors.New("usage counters regressed or exceeded grant; retain the original agent state")
 		}
-		_, e = tx.Exec(ctx, "UPDATE grants SET spent=$3,released=$4,traffic=$5,unlimited_spent=$6,unlimited_open=unlimited_open AND $7 WHERE node_id=$1 AND user_id=$2 AND quota_epoch=$8", nodeID, u.UserId, u.Spent, u.Released, u.Traffic, u.UnlimitedSpent, u.QuotaUnlimited, u.QuotaEpoch)
+		_, e = tx.Exec(ctx, "UPDATE grants SET spent=$3,released=$4,traffic=$5,unlimited_spent=$6,unlimited_open=unlimited_open AND $7,charged_bytes=$9 WHERE node_id=$1 AND user_id=$2 AND quota_epoch=$8", nodeID, u.UserId, u.Spent, u.Released, u.Traffic, u.UnlimitedSpent, u.QuotaUnlimited, u.QuotaEpoch, charged)
 		if e != nil {
 			return nil, e
 		}
@@ -243,6 +268,11 @@ func (s *StreamServer) exchangeWithCredential(ctx context.Context, conn interfac
  ON CONFLICT(node_id,user_id,quota_epoch) DO UPDATE SET unlimited_open=true WHERE NOT grants.unlimited_open`, nodeID); e != nil {
 		return nil, e
 	}
+	if r.ProtocolVersion >= 25 {
+		if _, e = tx.Exec(ctx, `INSERT INTO grants(node_id,user_id,quota_epoch) SELECT $1,u.id,u.quota_epoch FROM user_entitlements u JOIN user_nodes n ON n.user_id=u.id AND n.node_id=$1 ON CONFLICT DO NOTHING`, nodeID); e != nil {
+			return nil, e
+		}
+	}
 	out := &pb.ControlMessage{Node: &pb.NodeConfig{}, AcknowledgedUsage: r.Usage}
 	settings, e := readSystemSettings(ctx, tx)
 	if e != nil {
@@ -264,11 +294,7 @@ func (s *StreamServer) exchangeWithCredential(ctx context.Context, conn interfac
 		return nil, e
 	}
 	if r.Probe != nil && validProbe(r.Probe) {
-		data, err := json.Marshal(r.Probe)
-		if err != nil {
-			return nil, err
-		}
-		if _, e = tx.Exec(ctx, "UPDATE nodes SET probe_received_at=CASE WHEN probe IS DISTINCT FROM $2::jsonb THEN now() ELSE probe_received_at END,probe=$2 WHERE id=$1", nodeID, data); e != nil {
+		if e = acceptProbe(ctx, tx, nodeID, r.Probe, time.Now()); e != nil {
 			return nil, e
 		}
 	}
@@ -415,6 +441,9 @@ func (s *StreamServer) exchangeWithCredential(ctx context.Context, conn interfac
 	if e = appendTLSControl(ctx, tx, nodeID, out); e != nil {
 		return nil, e
 	}
+	if e = appendRandomControl(ctx, tx, nodeID, out); e != nil {
+		return nil, e
+	}
 	// Legacy agents terminate TLS. Do not send them shared listener resources.
 	if r.ProtocolVersion < 21 {
 		out.Node.TlsInbounds = nil
@@ -436,6 +465,9 @@ func (s *StreamServer) exchangeWithCredential(ctx context.Context, conn interfac
 			if rule.TunnelProtocol == "tls_tcp" && rule.Tls.GetPaddingEnabled() && (r.ProtocolVersion < 23 || version < 23) {
 				rule.Enabled = false
 			}
+			if rule.TunnelProtocol == "tls_h3" && rule.Tls.GetQuicPadding().GetEnabled() && (r.ProtocolVersion < 29 || version < 29) {
+				rule.Enabled = false
+			}
 			if rule.Tls != nil {
 				rule.Tls.SequenceAuth = r.ProtocolVersion >= 14 && version >= 14
 			}
@@ -451,7 +483,12 @@ func (s *StreamServer) exchangeWithCredential(ctx context.Context, conn interfac
 	if out.Node.TunnelProtocol == "tls_tcp" && out.Node.Tls.GetPaddingEnabled() && r.ProtocolVersion < 23 {
 		out.Node.TunnelExitEnabled = false
 	}
-	if out.Node.TunnelExitEnabled && tunnel.UDP(out.Node.TunnelProtocol) && r.ProtocolVersion < int32(tunnel.MinimumVersion(out.Node.TunnelProtocol)) {
+	if out.Node.TunnelProtocol == "tls_h3" && out.Node.Tls.GetQuicPadding().GetEnabled() && r.ProtocolVersion < 29 {
+		out.Node.TunnelExitEnabled = false
+		out.TunnelLinks = nil
+		out.EgressRules = nil
+	}
+	if out.Node.TunnelExitEnabled && (tunnel.UDP(out.Node.TunnelProtocol) || tunnel.Random(out.Node.TunnelProtocol) || tunnel.H3(out.Node.TunnelProtocol)) && r.ProtocolVersion < int32(tunnel.MinimumVersion(out.Node.TunnelProtocol)) {
 		out.Node.TunnelExitEnabled = false
 		out.TunnelLinks = nil
 		out.EgressRules = nil
@@ -470,6 +507,9 @@ func (s *StreamServer) exchangeWithCredential(ctx context.Context, conn interfac
 		}
 		out.EgressRules = nil
 		out.TunnelLinks = nil
+	}
+	if e = appendMeteringControl(ctx, tx, nodeID, r.ProtocolVersion, out); e != nil {
+		return nil, e
 	}
 	if e = appendIPRecoveryControl(ctx, tx, nodeID, out); e != nil {
 		return nil, e

@@ -33,19 +33,7 @@ func (s *Server) plans(w http.ResponseWriter, r *http.Request) {
 	s.sendRows(w, rows, e)
 }
 func (s *Server) sendRows(w http.ResponseWriter, rows pgx.Rows, e error) {
-	if e != nil {
-		s.dbError(w, e)
-		return
-	}
-	v, e := pgx.CollectRows(rows, pgx.RowToMap)
-	if e != nil {
-		s.dbError(w, e)
-		return
-	}
-	if v == nil {
-		v = []map[string]any{}
-	}
-	writeJSON(w, 200, v)
+	s.sendRowsWith(w, rows, e, nil)
 }
 func (s *Server) savePlan(w http.ResponseWriter, r *http.Request) {
 	if !admin(w, r) {

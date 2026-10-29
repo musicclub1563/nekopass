@@ -18,6 +18,9 @@ type State struct {
 	Instance string
 }
 type DiskUser struct {
+	Metered        bool
+	Charged        int64
+	ChargeFraction int64
 	Epoch          int64
 	Issued         int64
 	Spent          int64
@@ -99,7 +102,11 @@ func (s *State) LoadUsers() (map[int64]DiskUser, error) {
 			if e = json.Unmarshal(v, &d); e != nil {
 				return e
 			}
-			if d.UnlimitedSpent < 0 || d.Traffic < 0 || d.Spent > math.MaxInt64-d.UnlimitedSpent || d.Traffic > d.Spent+d.UnlimitedSpent || d.Spent < 0 || d.Released < 0 || d.Issued < d.Spent || d.Issued-d.Spent < d.Released {
+			if !d.Metered {
+				d.Charged = d.Traffic
+				d.Metered = true
+			}
+			if d.Charged < 0 || d.ChargeFraction < 0 || d.ChargeFraction >= 10000 || d.UnlimitedSpent < 0 || d.Traffic < 0 || d.Spent > math.MaxInt64-d.UnlimitedSpent || d.Charged > d.Spent+d.UnlimitedSpent || d.Spent < 0 || d.Released < 0 || d.Issued < d.Spent || d.Issued-d.Spent < d.Released {
 				return errors.New("corrupt quota state")
 			}
 			out[id] = d
@@ -144,6 +151,10 @@ func (s *State) LoadRetired() (map[string]DiskUser, error) {
 			var d DiskUser
 			if e := json.Unmarshal(v, &d); e != nil {
 				return e
+			}
+			if !d.Metered {
+				d.Charged = d.Traffic
+				d.Metered = true
 			}
 			out[string(k)] = d
 			return nil

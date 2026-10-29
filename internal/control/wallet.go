@@ -335,31 +335,8 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request, pay bool) {
 		fail(w, 409, "余额不足，请先充值")
 		return
 	}
-	data, _ := json.Marshal(quote)
-	var oid int64
-	e = tx.QueryRow(ctx, `INSERT INTO shop_orders(order_no,user_id,kind,plan_id,plan_name,cycle,amount_cents,status,request_key,snapshot,created_at,paid_at) VALUES($1,$2,$3,$4,$5,$6,$7,'paid',$8,$9,$10,$10) RETURNING id`, "P"+Secret()[:24], uid, kind, p.ID, p.Name, in.Cycle, price, in.RequestKey, data, now).Scan(&oid)
+	oid, balance, e := completePurchase(ctx, tx, uid, p, sub, in.Cycle, in.RequestKey, price, balance, now, false)
 	if e != nil {
-		s.dbError(w, e)
-		return
-	}
-	balance -= price
-	if _, e = tx.Exec(ctx, "UPDATE wallet_accounts SET balance_cents=$2,updated_at=now() WHERE user_id=$1", uid, balance); e != nil {
-		s.dbError(w, e)
-		return
-	}
-	if _, e = tx.Exec(ctx, `INSERT INTO wallet_entries(user_id,order_id,amount_cents,balance_after_cents,kind,note) VALUES($1,$2,$3,$4,'purchase',$5)`, uid, oid, -price, balance, p.Name+" · "+billingNames[in.Cycle]); e != nil {
-		s.dbError(w, e)
-		return
-	}
-	index := 0
-	if next != nil {
-		index = 1
-	}
-	if _, e = tx.Exec(ctx, `UPDATE users SET plan_id=$2,plan_started_at=$3,subscription_managed=true,subscription_expires_at=$4,next_reset_at=$5,reset_anchor_at=$3,reset_index=$6,quota_epoch=quota_epoch+1,traffic_base_bytes=0,resources_revision=resources_revision+1 WHERE id=$1`, uid, p.ID, now, expires, next, index); e != nil {
-		s.dbError(w, e)
-		return
-	}
-	if e = creditReferral(ctx, tx, uid, oid, price, p.Name); e != nil {
 		s.dbError(w, e)
 		return
 	}
@@ -368,4 +345,49 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request, pay bool) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"id": oid, "balance_cents": balance, "expires_at": expires, "next_reset_at": next})
+}
+
+func completePurchase(ctx context.Context, tx pgx.Tx, uid int64, p salePlan, sub subscriptionState, cycle, requestKey string, price, balance int64, now time.Time, automatic bool) (int64, int64, error) {
+	if price < 0 || price > maxMoneyCents || balance < price {
+		return 0, balance, errors.New("invalid purchase balance or price")
+	}
+	expires, next, e := purchasedDates(now, sub, sub.PlanID == p.ID, cycle)
+	if e != nil {
+		return 0, balance, e
+	}
+	kind := "purchase"
+	if sub.PlanID == p.ID {
+		kind = "renewal"
+	}
+	quote := map[string]any{"plan_id": p.ID, "plan_name": p.Name, "cycle": cycle, "amount_cents": price, "expires_at": expires, "next_reset_at": next, "automatic": automatic, "balance_cents": balance, "epoch": sub.Epoch, "kind": kind, "replaces_plan": sub.PlanID != 0 && sub.PlanID != p.ID, "resets_traffic": true, "quoted_at": now}
+	data, _ := json.Marshal(quote)
+	var oid int64
+	e = tx.QueryRow(ctx, `INSERT INTO shop_orders(order_no,user_id,kind,plan_id,plan_name,cycle,amount_cents,status,request_key,snapshot,created_at,paid_at) VALUES($1,$2,$3,$4,$5,$6,$7,'paid',$8,$9,$10,$10) RETURNING id`, "P"+Secret()[:24], uid, kind, p.ID, p.Name, cycle, price, requestKey, data, now).Scan(&oid)
+	if e != nil {
+		return 0, balance, e
+	}
+	balance -= price
+	if _, e = tx.Exec(ctx, "UPDATE wallet_accounts SET balance_cents=$2,updated_at=now() WHERE user_id=$1", uid, balance); e != nil {
+		return 0, balance, e
+	}
+	if _, e = tx.Exec(ctx, `INSERT INTO wallet_entries(user_id,order_id,amount_cents,balance_after_cents,kind,note) VALUES($1,$2,$3,$4,'purchase',$5)`, uid, oid, -price, balance, p.Name+" · "+billingNames[cycle]); e != nil {
+		return 0, balance, e
+	}
+	index := 0
+	if next != nil {
+		index = 1
+	}
+	if _, e = tx.Exec(ctx, `UPDATE users SET plan_id=$2,plan_started_at=$3,subscription_managed=true,subscription_expires_at=$4,next_reset_at=$5,reset_anchor_at=$3,reset_index=$6,quota_epoch=quota_epoch+1,traffic_base_bytes=0,actual_traffic_base_bytes=0,resources_revision=resources_revision+1 WHERE id=$1`, uid, p.ID, now, expires, next, index); e != nil {
+		return 0, balance, e
+	}
+	if e = creditReferral(ctx, tx, uid, oid, price, p.Name); e != nil {
+		return 0, balance, e
+	}
+
+	if cycle == "onetime" {
+		if _, e = tx.Exec(ctx, "UPDATE users SET auto_renew_enabled=false,auto_renew_status='off',auto_renew_error='' WHERE id=$1", uid); e != nil {
+			return 0, balance, e
+		}
+	}
+	return oid, balance, nil
 }

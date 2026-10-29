@@ -52,13 +52,13 @@ func (v UserResourcesInput) validate() error {
 
 func resourceSnapshot(ctx context.Context, tx pgx.Tx, uid int64) ([]byte, error) {
 	var data []byte
-	e := tx.QueryRow(ctx, `SELECT to_jsonb(u)||jsonb_build_object('traffic_bytes',u.traffic_base_bytes+COALESCE((SELECT sum(traffic) FROM current_grants WHERE user_id=u.id),0),'node_group_ids',COALESCE((SELECT jsonb_agg(group_id ORDER BY group_id) FROM user_node_groups WHERE user_id=u.id),'[]')) FROM user_entitlements u WHERE u.id=$1`, uid).Scan(&data)
+	e := tx.QueryRow(ctx, `SELECT to_jsonb(u)||jsonb_build_object('traffic_bytes',u.traffic_base_bytes+COALESCE((SELECT sum(charged_bytes) FROM current_grants WHERE user_id=u.id),0),'node_group_ids',COALESCE((SELECT jsonb_agg(group_id ORDER BY group_id) FROM user_node_groups WHERE user_id=u.id),'[]')) FROM user_entitlements u WHERE u.id=$1`, uid).Scan(&data)
 	return data, e
 }
 
 func applyUserResources(ctx context.Context, tx pgx.Tx, uid int64, v UserResourcesInput, planChanged bool) error {
-	var oldQuota, used int64
-	if e := tx.QueryRow(ctx, `SELECT quota_bytes,traffic_base_bytes+COALESCE((SELECT sum(traffic) FROM current_grants WHERE user_id=u.id),0)::bigint FROM users u WHERE id=$1`, uid).Scan(&oldQuota, &used); e != nil {
+	var oldQuota, used, actualUsed int64
+	if e := tx.QueryRow(ctx, `SELECT quota_bytes,traffic_base_bytes+COALESCE((SELECT sum(charged_bytes) FROM current_grants WHERE user_id=u.id),0)::bigint,actual_traffic_base_bytes+COALESCE((SELECT sum(traffic) FROM current_grants WHERE user_id=u.id),0)::bigint FROM users u WHERE id=$1`, uid).Scan(&oldQuota, &used, &actualUsed); e != nil {
 		return e
 	}
 	if v.TrafficBytes != nil {
@@ -73,7 +73,7 @@ func applyUserResources(ctx context.Context, tx pgx.Tx, uid int64, v UserResourc
 	_, e := tx.Exec(ctx, `UPDATE users SET speed_bps=COALESCE($2::bigint*125000,speed_bps),quota_bytes=COALESCE($3,quota_bytes),max_rules=COALESCE($4,max_rules),max_connections=COALESCE($5,max_connections),ip_limit=COALESCE($6,ip_limit),rule_speed_bps=COALESCE($7::bigint*125000,rule_speed_bps),rule_ip_limit=COALESCE($8,rule_ip_limit),rule_connection_limit=COALESCE($9,rule_connection_limit),
  resource_expires_at=CASE WHEN $10 THEN $11::timestamptz ELSE resource_expires_at END,subscription_expires_at=CASE WHEN $10 AND subscription_managed THEN $11::timestamptz ELSE subscription_expires_at END,
  next_reset_at=CASE WHEN $10 AND $11::timestamptz IS NOT NULL THEN LEAST(next_reset_at,$11::timestamptz) ELSE next_reset_at END,
- quota_epoch=quota_epoch+CASE WHEN $12 THEN 1 ELSE 0 END,traffic_base_bytes=CASE WHEN $12 THEN $13 ELSE traffic_base_bytes END,resources_revision=resources_revision+1 WHERE id=$1`, uid, v.SpeedMbps, v.QuotaBytes, v.MaxRules, v.MaxConnections, v.IPLimit, v.RuleSpeedMbps, v.RuleIPLimit, v.RuleConnectionLimit, v.ExpiresAt != nil, expires, rotate, used)
+ quota_epoch=quota_epoch+CASE WHEN $12 THEN 1 ELSE 0 END,traffic_base_bytes=CASE WHEN $12 THEN $13 ELSE traffic_base_bytes END,actual_traffic_base_bytes=CASE WHEN $12 THEN $14 ELSE actual_traffic_base_bytes END,resources_revision=resources_revision+1 WHERE id=$1`, uid, v.SpeedMbps, v.QuotaBytes, v.MaxRules, v.MaxConnections, v.IPLimit, v.RuleSpeedMbps, v.RuleIPLimit, v.RuleConnectionLimit, v.ExpiresAt != nil, expires, rotate, used, actualUsed)
 	if e != nil {
 		return e
 	}

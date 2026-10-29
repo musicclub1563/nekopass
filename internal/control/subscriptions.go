@@ -91,7 +91,7 @@ func resetDueSubscription(ctx context.Context, tx pgx.Tx, uid int64, sub *subscr
 	if sub.Expires != nil && next.After(*sub.Expires) {
 		next = *sub.Expires
 	}
-	_, e := tx.Exec(ctx, "UPDATE users SET quota_epoch=quota_epoch+1,traffic_base_bytes=0,resources_revision=resources_revision+1,next_reset_at=$2,reset_index=$3 WHERE id=$1", uid, next, index)
+	_, e := tx.Exec(ctx, "UPDATE users SET quota_epoch=quota_epoch+1,traffic_base_bytes=0,actual_traffic_base_bytes=0,resources_revision=resources_revision+1,next_reset_at=$2,reset_index=$3 WHERE id=$1", uid, next, index)
 	if e == nil {
 		sub.Epoch++
 		sub.NextReset = &next
@@ -104,6 +104,9 @@ func (s *Server) RunSubscriptionClock(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
+		if e := s.renewDueSubscriptions(ctx, time.Now()); e != nil && ctx.Err() == nil {
+			slog.Error("automatic renewal", "error", e)
+		}
 		if e := s.resetDueSubscriptions(ctx, time.Now()); e != nil && ctx.Err() == nil {
 			slog.Error("subscription reset", "error", e)
 		}

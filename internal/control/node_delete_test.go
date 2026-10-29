@@ -112,6 +112,9 @@ func TestForceDeleteNodeArchivesUsageWithoutRefundingQuota(t *testing.T) {
  ($1,$3,3,1000,400,100,300,50,true),($1,$3,2,100,100,0,100,0,false),($2,$3,3,500,100,0,100,0,false)`, oldNode, liveNode, f.user); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := f.p.Exec(ctx, "UPDATE grants SET charged_bytes=traffic/2 WHERE node_id=ANY($1)", []int64{oldNode, liveNode}); err != nil {
+		t.Fatal(err)
+	}
 	w := f.request(f.user, "rules", "POST", RuleInput{NodeID: liveNode, Name: "migrated-ledger", Protocol: "tcp", Targets: []string{"1.1.1.1:8080"}, Enabled: true})
 	if w.Code != 200 {
 		t.Fatalf("cannot create accounting fixture rule: %d %s", w.Code, w.Body.String())
@@ -178,6 +181,10 @@ func TestForceDeleteNodeArchivesUsageWithoutRefundingQuota(t *testing.T) {
 	}
 	if after := totals(); before != after {
 		t.Fatal("deleted node reset usage or refunded outstanding quota", before, after)
+	}
+	var charged int64
+	if err := f.p.QueryRow(ctx, "SELECT sum(charged_bytes) FROM current_grants WHERE user_id=$1", f.user).Scan(&charged); err != nil || charged != 200 {
+		t.Fatal("deleted node lost weighted charges", charged, err)
 	}
 	if _, err := f.s.nodeForToken(ctx, key); err != pgx.ErrNoRows {
 		t.Fatal("deleted node credential still authenticates", err)

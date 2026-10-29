@@ -12,9 +12,9 @@ const server=http.createServer((req,res)=>{
  res.setHeader('Content-Type',({'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css'})[path.extname(file)]||'application/octet-stream');fs.createReadStream(file).pipe(res);
 });
 const nodes=[
- {id:10,name:'入口节点',ingress_enabled:true,allow_direct:true,tunnel_exit_enabled:false,tunnel_protocol:'plain_tcp',allowed_ingress_ids:[],public_address:'entry.example.test',port_min:1024,port_max:65535,group_ids:[20]},
- {id:20,name:'单个出口',ingress_enabled:false,allow_direct:false,tunnel_exit_enabled:true,tunnel_protocol:'plain_tcp',allowed_ingress_ids:[10],public_address:'exit.example.test',group_ids:[20]},
- {id:30,name:'备用出口',ingress_enabled:false,allow_direct:false,tunnel_exit_enabled:true,tunnel_protocol:'tls_h2',allowed_ingress_ids:[10],public_address:'backup.example.test',group_ids:[20]},
+ {id:10,ingress_multiplier:'1.25',egress_multiplier:'0',name:'入口节点',ingress_enabled:true,allow_direct:true,tunnel_exit_enabled:false,tunnel_protocol:'plain_tcp',allowed_ingress_ids:[],public_address:'entry.example.test',port_min:1024,port_max:65535,group_ids:[20]},
+ {id:20,ingress_multiplier:'1',egress_multiplier:'0.75',name:'单个出口',ingress_enabled:false,allow_direct:false,tunnel_exit_enabled:true,tunnel_protocol:'plain_tcp',allowed_ingress_ids:[10],public_address:'exit.example.test',group_ids:[20]},
+ {id:30,ingress_multiplier:'1',egress_multiplier:'0',name:'备用出口',ingress_enabled:false,allow_direct:false,tunnel_exit_enabled:true,tunnel_protocol:'tls_h2',allowed_ingress_ids:[10],public_address:'backup.example.test',group_ids:[20]},
 ];
 const group={id:20,name:'多出口节点组',description:'',enabled:true,sort_order:0,strategy:'least_connections',node_ids:[10,20,30],plan_count:1,health_interval_seconds:5,health_failures:3,health_successes:2,members:[{node_id:10,role:'disabled',weight:1},{node_id:20,role:'active',weight:2},{node_id:30,role:'standby',weight:1}]};
 (async()=>{
@@ -48,6 +48,7 @@ const group={id:20,name:'多出口节点组',description:'',enabled:true,sort_or
   const grouped=page.getByRole('option',{name:'多出口节点组',exact:true});
   assert.equal(await single.locator('.is-node .ui-icon').evaluate(e=>getComputedStyle(e).color),'rgb(71, 200, 138)');
   assert.equal(await grouped.locator('.is-group .ui-icon').evaluate(e=>getComputedStyle(e).color),'rgb(102, 169, 255)');
+  assert.match(await single.innerText(),/2 倍/);assert.match(await grouped.innerText(),/1.25–2 倍（按实际出口）/);
   await page.waitForTimeout(250);
   if(process.env.NEKOPASS_UI_SCREENSHOT_DIR){fs.mkdirSync(process.env.NEKOPASS_UI_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.NEKOPASS_UI_SCREENSHOT_DIR,'group-exit-options.png')})}
   await grouped.click();await field(dlg,'目标地址').locator('textarea').fill('target.example.test:443');

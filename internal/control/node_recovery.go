@@ -35,16 +35,17 @@ func appendStateRestore(ctx context.Context, tx pgx.Tx, node int64, r *pb.AgentM
 		ids = append(ids, user.Id)
 		epochs = append(epochs, user.QuotaEpoch)
 	}
-	rows, err := tx.Query(ctx, `SELECT user_id,quota_epoch,issued,spent,released,traffic,unlimited_spent FROM grants WHERE node_id=$1 AND (user_id,quota_epoch) IN (SELECT unnest($2::bigint[]),unnest($3::bigint[])) ORDER BY user_id`, node, ids, epochs)
+	rows, err := tx.Query(ctx, `SELECT user_id,quota_epoch,issued,spent,released,traffic,unlimited_spent,charged_bytes FROM grants WHERE node_id=$1 AND (user_id,quota_epoch) IN (SELECT unnest($2::bigint[]),unnest($3::bigint[])) ORDER BY user_id`, node, ids, epochs)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		v := &pb.UserStateBaseline{}
-		if err = rows.Scan(&v.UserId, &v.QuotaEpoch, &v.Issued, &v.Spent, &v.Released, &v.Traffic, &v.UnlimitedSpent); err != nil {
+		if err = rows.Scan(&v.UserId, &v.QuotaEpoch, &v.Issued, &v.Spent, &v.Released, &v.Traffic, &v.UnlimitedSpent, &v.ChargedBytes); err != nil {
 			rows.Close()
 			return err
 		}
+		v.MeteringConfigured = r.ProtocolVersion >= 25
 		restore.Users = append(restore.Users, v)
 	}
 	err = rows.Err()

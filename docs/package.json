@@ -14,5 +14,5 @@
     "typescript": "~5.9.3",
     "vitepress": "1.6.4"
   },
-  "overrides": { "vite": "6.4.4" }
+  "overrides": { "vite": "6.4.5" }
 }

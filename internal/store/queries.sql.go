@@ -30,7 +30,7 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash string) error {
 }
 
 const findNodeByToken = `-- name: FindNodeByToken :one
-SELECT id, name, token_hash, instance_id, last_seen, applied_revision, sync_error, active_connections, public_address, enabled, notes, listen_host, port_min, port_max, max_connections, dial_timeout_seconds, idle_timeout_seconds, probe_interval_seconds, disk_path, network_interfaces, probe, probe_received_at, config_revision, token, allow_direct, tunnel_exit_enabled, tunnel_protocol, tunnel_listen_host, tunnel_listen_port, tunnel_public_host, ingress_enabled, tls_config, tls_certificate, tls_private_key, tls_ca, tls_status, tls_error, tls_not_after, tls_generation, protocol_version, acme_ack, agent_version, update_supported FROM nodes WHERE token_hash=$1
+SELECT id, name, token_hash, instance_id, last_seen, applied_revision, sync_error, active_connections, public_address, enabled, notes, listen_host, port_min, port_max, max_connections, dial_timeout_seconds, idle_timeout_seconds, probe_interval_seconds, disk_path, network_interfaces, probe, probe_received_at, config_revision, token, allow_direct, tunnel_exit_enabled, tunnel_protocol, tunnel_listen_host, tunnel_listen_port, tunnel_public_host, ingress_enabled, tls_config, tls_certificate, tls_private_key, tls_ca, tls_status, tls_error, tls_not_after, tls_generation, protocol_version, acme_ack, agent_version, update_supported, ingress_rate, egress_rate, random_config FROM nodes WHERE token_hash=$1
 `
 
 func (q *Queries) FindNodeByToken(ctx context.Context, tokenHash string) (Node, error) {
@@ -80,12 +80,15 @@ func (q *Queries) FindNodeByToken(ctx context.Context, tokenHash string) (Node, 
 		&i.AcmeAck,
 		&i.AgentVersion,
 		&i.UpdateSupported,
+		&i.IngressRate,
+		&i.EgressRate,
+		&i.RandomConfig,
 	)
 	return i, err
 }
 
 const findSession = `-- name: FindSession :one
-SELECT u.id, u.username, u.password_hash, u.is_admin, u.enabled, u.created_at, u.plan_id, u.plan_started_at, u.subscription_managed, u.subscription_expires_at, u.next_reset_at, u.reset_anchor_at, u.reset_index, u.quota_epoch, u.speed_bps, u.quota_bytes, u.max_rules, u.max_connections, u.ip_limit, u.rule_speed_bps, u.rule_ip_limit, u.rule_connection_limit, u.resource_expires_at, u.traffic_base_bytes, u.resources_revision,s.cookie_renewed_at FROM users u JOIN sessions s ON s.user_id=u.id
+SELECT u.id, u.username, u.password_hash, u.is_admin, u.enabled, u.created_at, u.plan_id, u.plan_started_at, u.subscription_managed, u.subscription_expires_at, u.next_reset_at, u.reset_anchor_at, u.reset_index, u.quota_epoch, u.speed_bps, u.quota_bytes, u.max_rules, u.max_connections, u.ip_limit, u.rule_speed_bps, u.rule_ip_limit, u.rule_connection_limit, u.resource_expires_at, u.traffic_base_bytes, u.resources_revision, u.actual_traffic_base_bytes, u.auto_renew_enabled, u.auto_renew_cycle, u.auto_renew_price_cents, u.auto_renew_status, u.auto_renew_error, u.auto_renew_next_attempt, u.auto_renew_last_attempt, u.auto_renew_last_success,s.cookie_renewed_at FROM users u JOIN sessions s ON s.user_id=u.id
 WHERE s.token_hash=$1 AND (s.expires_at IS NULL OR s.expires_at>now())
 `
 
@@ -123,13 +126,22 @@ func (q *Queries) FindSession(ctx context.Context, tokenHash string) (FindSessio
 		&i.User.ResourceExpiresAt,
 		&i.User.TrafficBaseBytes,
 		&i.User.ResourcesRevision,
+		&i.User.ActualTrafficBaseBytes,
+		&i.User.AutoRenewEnabled,
+		&i.User.AutoRenewCycle,
+		&i.User.AutoRenewPriceCents,
+		&i.User.AutoRenewStatus,
+		&i.User.AutoRenewError,
+		&i.User.AutoRenewNextAttempt,
+		&i.User.AutoRenewLastAttempt,
+		&i.User.AutoRenewLastSuccess,
 		&i.CookieRenewedAt,
 	)
 	return i, err
 }
 
 const findUser = `-- name: FindUser :one
-SELECT id, username, password_hash, is_admin, enabled, created_at, plan_id, plan_started_at, subscription_managed, subscription_expires_at, next_reset_at, reset_anchor_at, reset_index, quota_epoch, speed_bps, quota_bytes, max_rules, max_connections, ip_limit, rule_speed_bps, rule_ip_limit, rule_connection_limit, resource_expires_at, traffic_base_bytes, resources_revision FROM users WHERE id = $1
+SELECT id, username, password_hash, is_admin, enabled, created_at, plan_id, plan_started_at, subscription_managed, subscription_expires_at, next_reset_at, reset_anchor_at, reset_index, quota_epoch, speed_bps, quota_bytes, max_rules, max_connections, ip_limit, rule_speed_bps, rule_ip_limit, rule_connection_limit, resource_expires_at, traffic_base_bytes, resources_revision, actual_traffic_base_bytes, auto_renew_enabled, auto_renew_cycle, auto_renew_price_cents, auto_renew_status, auto_renew_error, auto_renew_next_attempt, auto_renew_last_attempt, auto_renew_last_success FROM users WHERE id = $1
 `
 
 func (q *Queries) FindUser(ctx context.Context, id int64) (User, error) {
@@ -161,12 +173,21 @@ func (q *Queries) FindUser(ctx context.Context, id int64) (User, error) {
 		&i.ResourceExpiresAt,
 		&i.TrafficBaseBytes,
 		&i.ResourcesRevision,
+		&i.ActualTrafficBaseBytes,
+		&i.AutoRenewEnabled,
+		&i.AutoRenewCycle,
+		&i.AutoRenewPriceCents,
+		&i.AutoRenewStatus,
+		&i.AutoRenewError,
+		&i.AutoRenewNextAttempt,
+		&i.AutoRenewLastAttempt,
+		&i.AutoRenewLastSuccess,
 	)
 	return i, err
 }
 
 const findUserByName = `-- name: FindUserByName :one
-SELECT id, username, password_hash, is_admin, enabled, created_at, plan_id, plan_started_at, subscription_managed, subscription_expires_at, next_reset_at, reset_anchor_at, reset_index, quota_epoch, speed_bps, quota_bytes, max_rules, max_connections, ip_limit, rule_speed_bps, rule_ip_limit, rule_connection_limit, resource_expires_at, traffic_base_bytes, resources_revision FROM users WHERE username = $1
+SELECT id, username, password_hash, is_admin, enabled, created_at, plan_id, plan_started_at, subscription_managed, subscription_expires_at, next_reset_at, reset_anchor_at, reset_index, quota_epoch, speed_bps, quota_bytes, max_rules, max_connections, ip_limit, rule_speed_bps, rule_ip_limit, rule_connection_limit, resource_expires_at, traffic_base_bytes, resources_revision, actual_traffic_base_bytes, auto_renew_enabled, auto_renew_cycle, auto_renew_price_cents, auto_renew_status, auto_renew_error, auto_renew_next_attempt, auto_renew_last_attempt, auto_renew_last_success FROM users WHERE username = $1
 `
 
 func (q *Queries) FindUserByName(ctx context.Context, username string) (User, error) {
@@ -198,6 +219,15 @@ func (q *Queries) FindUserByName(ctx context.Context, username string) (User, er
 		&i.ResourceExpiresAt,
 		&i.TrafficBaseBytes,
 		&i.ResourcesRevision,
+		&i.ActualTrafficBaseBytes,
+		&i.AutoRenewEnabled,
+		&i.AutoRenewCycle,
+		&i.AutoRenewPriceCents,
+		&i.AutoRenewStatus,
+		&i.AutoRenewError,
+		&i.AutoRenewNextAttempt,
+		&i.AutoRenewLastAttempt,
+		&i.AutoRenewLastSuccess,
 	)
 	return i, err
 }

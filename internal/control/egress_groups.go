@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	pb "github.com/nekopass/nekopass/internal/protocol"
-	"google.golang.org/protobuf/proto"
 )
 
 type nodeGroupMember struct {
@@ -127,9 +126,9 @@ func appendGroupDrafts(ctx context.Context, tx pgx.Tx, out *pb.ControlMessage) (
 		if r == nil || candidate.Host == "" || candidate.Port == 0 || candidate.Token == "" {
 			continue
 		}
-		p := proto.Clone(r).(*pb.Rule)
-		p.EgressGroupId = 0
-		p.EgressPeers = nil
+		// The draft is used only to resolve transport/capability settings. Do
+		// not duplicate targets, SNI lists or origin certificates per exit.
+		p := &pb.Rule{Id: r.Id, UserId: r.UserId, IngressNodeId: r.IngressNodeId, QuotaEpoch: r.QuotaEpoch, Protocol: r.Protocol, Enabled: r.Enabled}
 		p.EgressNodeId = candidate.NodeId
 		p.TunnelHost = candidate.Host
 		p.TunnelPort = candidate.Port
@@ -147,10 +146,15 @@ func finishGroupDrafts(out *pb.ControlMessage, drafts []groupRuleDraft, version 
 	for _, d := range drafts {
 		p := d.peer
 		if p.Enabled {
-			d.rule.EgressPeers = append(d.rule.EgressPeers, &pb.EgressPeer{NodeId: p.EgressNodeId, Host: p.TunnelHost, Port: p.TunnelPort, Token: p.TunnelToken, Protocol: p.TunnelProtocol, Tls: p.Tls, Weight: d.weight, Standby: d.standby})
+			d.rule.EgressPeers = append(d.rule.EgressPeers, &pb.EgressPeer{NodeId: p.EgressNodeId, Host: p.TunnelHost, Port: p.TunnelPort, Token: p.TunnelToken, Protocol: p.TunnelProtocol, Tls: p.Tls, Random: p.Random, Weight: d.weight, Standby: d.standby})
 		}
 	}
-	out.Rules = out.Rules[:originalCount]
+	if len(out.Rules) > originalCount {
+		clear(out.Rules[originalCount:])
+		// A large candidate matrix must not remain in the backing array of
+		// the small final rule list while the node receives its configuration.
+		out.Rules = append([]*pb.Rule(nil), out.Rules[:originalCount]...)
+	}
 	for _, r := range out.Rules {
 		if r.EgressGroupId != 0 && (version < 24 || len(r.EgressPeers) == 0) {
 			r.Enabled = false

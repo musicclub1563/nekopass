@@ -5,10 +5,18 @@ import { api, type Me } from './api'
 export function usePage(load: (me: Me) => Promise<void>, options: { admin?: boolean; interval?: number } = {}) {
  const me = ref<Me | null>(null), loading = ref(true), error = ref(''), busy = ref(false)
  let timer: ReturnType<typeof setInterval> | undefined
- async function refresh() { if (!me.value) return; try { await load(me.value); error.value = '' } catch (e) { error.value = (e as Error).message } }
+ let refreshing:Promise<void>|undefined, refreshAgain=false, disposed=false
+ function refresh():Promise<void> {
+  if(!me.value||disposed)return Promise.resolve()
+  if(refreshing){refreshAgain=true;return refreshing}
+  refreshing=(async()=>{
+   do{refreshAgain=false;try{await load(me.value!);error.value=''}catch(e){error.value=(e as Error).message}}while(refreshAgain&&!disposed)
+  })().finally(()=>{refreshing=undefined})
+  return refreshing
+ }
  async function run(task: () => Promise<void>) { busy.value = true; try { await task() } catch (e) { ElMessage.error((e as Error).message) } finally { busy.value = false } }
- onMounted(async () => { try { me.value = await api<Me>('me'); if (options.admin && !me.value.is_admin) { location.replace('/'); return }; await refresh() } catch (e) { error.value = (e as Error).message } finally { loading.value = false }; if (options.interval) timer = setInterval(() => { if (!document.hidden) void refresh() }, options.interval) })
- onUnmounted(() => { if (timer) clearInterval(timer) })
+ onMounted(async () => { try { me.value = await api<Me>('me'); if (options.admin && !me.value.is_admin) { location.replace('/'); return }; await refresh() } catch (e) { error.value = (e as Error).message } finally { loading.value = false }; if (options.interval&&!disposed) timer = setInterval(() => { if (!document.hidden&&!refreshing) void refresh() }, options.interval) })
+ onUnmounted(() => { disposed=true; if (timer) clearInterval(timer) })
  return { me, loading, error, busy, refresh, run }
 }
 

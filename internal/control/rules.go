@@ -228,7 +228,7 @@ func putRule(ctx context.Context, tx pgx.Tx, actor store.User, id int64, in Rule
 		return 0, errors.New("此节点未启用入口功能，只能选择其他入口")
 	}
 	if in.EgressGroupID != 0 {
-		if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_node_groups ug JOIN node_groups g ON g.id=ug.group_id AND g.enabled JOIN node_group_members m ON m.group_id=g.id AND m.role<>'disabled' JOIN nodes n ON n.id=m.node_id AND n.enabled AND n.tunnel_exit_enabled JOIN node_tunnel_links l ON l.egress_node_id=n.id AND l.ingress_node_id=$2 JOIN user_nodes un ON un.node_id=n.id AND un.user_id=$1 WHERE ug.user_id=$1 AND ug.group_id=$3 AND n.id<>$2 AND ($4='udp' OR n.tunnel_protocol NOT IN ('plain_udp','dtls_udp')))`, in.UserID, in.NodeID, in.EgressGroupID, in.Protocol).Scan(&allowed); e != nil {
+		if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_node_groups ug JOIN node_groups g ON g.id=ug.group_id AND g.enabled JOIN node_group_members m ON m.group_id=g.id AND m.role<>'disabled' JOIN nodes n ON n.id=m.node_id AND n.enabled AND n.tunnel_exit_enabled JOIN node_tunnel_links l ON l.egress_node_id=n.id AND l.ingress_node_id=$2 JOIN user_nodes un ON un.node_id=n.id AND un.user_id=$1 WHERE ug.user_id=$1 AND ug.group_id=$3 AND n.id<>$2 AND ($4='udp' OR n.tunnel_protocol NOT IN ('plain_udp','dtls_udp','random_udp')))`, in.UserID, in.NodeID, in.EgressGroupID, in.Protocol).Scan(&allowed); e != nil {
 			return 0, e
 		}
 		if !allowed {
@@ -278,16 +278,26 @@ func putRule(ctx context.Context, tx pgx.Tx, actor store.User, id int64, in Rule
 	if err := validateTLSRule(ctx, tx, &in, id); err != nil {
 		return 0, err
 	}
-	var portMin, portMax int
-	if err := tx.QueryRow(ctx, "SELECT port_min,port_max FROM nodes WHERE id=$1", in.NodeID).Scan(&portMin, &portMax); err != nil {
+	var portMin, portMax, reservedPort int
+	var exitMode string
+	if err := tx.QueryRow(ctx, "SELECT port_min,port_max,CASE WHEN tunnel_exit_enabled THEN tunnel_listen_port ELSE 0 END,tunnel_protocol FROM nodes WHERE id=$1", in.NodeID).Scan(&portMin, &portMax, &reservedPort, &exitMode); err != nil {
 		return 0, err
+	}
+	portConflict := false
+	for _, network := range tunnel.Networks(exitMode) {
+		if network == in.Protocol {
+			portConflict = true
+		}
+	}
+	if portConflict && reservedPort != 0 && in.ListenPort == reservedPort {
+		return 0, errors.New("监听端口与节点的隧道端口冲突")
 	}
 	if in.ListenPort != 0 && (in.ListenPort < portMin || in.ListenPort > portMax) {
 		return 0, fmt.Errorf("监听端口须在节点允许范围 %d–%d 内", portMin, portMax)
 	}
 	if in.ListenPort == 0 && in.TLSInboundID == 0 {
 		// The rule transaction lock serializes allocation, including import and switch operations.
-		if e := tx.QueryRow(ctx, `SELECT p FROM generate_series($3::integer,$4::integer) p WHERE NOT EXISTS(SELECT 1 FROM rule_ports WHERE node_id=$1 AND listen_port=p AND COALESCE(rule_id,0)<>$2 AND ($5='tcp_udp' OR protocol=$5)) ORDER BY random() LIMIT 1`, in.NodeID, id, portMin, portMax, in.Protocol).Scan(&in.ListenPort); e != nil {
+		if e := tx.QueryRow(ctx, `SELECT p FROM generate_series($3::integer,$4::integer) p WHERE (NOT $6 OR p<>$7) AND NOT EXISTS(SELECT 1 FROM rule_ports WHERE node_id=$1 AND listen_port=p AND COALESCE(rule_id,0)<>$2 AND ($5='tcp_udp' OR protocol=$5)) ORDER BY random() LIMIT 1`, in.NodeID, id, portMin, portMax, in.Protocol, portConflict, reservedPort).Scan(&in.ListenPort); e != nil {
 			return 0, errors.New("没有可分配端口")
 		}
 	}
@@ -352,7 +362,9 @@ func (s *Server) rules(w http.ResponseWriter, r *http.Request) {
  WHEN r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o WHERE o.rule_id=r.id) THEN 'unauthorized'
  WHEN r.egress_group_id IS NOT NULL AND n.protocol_version<24 THEN 'upgrade_required'
  WHEN r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND x.protocol_version>=24) THEN 'upgrade_required'
- WHEN u.quota_bytes>=0 AND (u.quota_bytes<=u.traffic_base_bytes+COALESCE((SELECT sum(traffic) FROM current_grants WHERE user_id=u.id),0) OR u.quota_bytes<u.traffic_base_bytes+COALESCE((SELECT sum(issued-released+unlimited_spent) FROM current_grants WHERE user_id=u.id),0)) THEN 'quota_exhausted'
+ WHEN n.protocol_version<25 AND r.egress_group_id IS NULL AND n.ingress_rate+COALESCE(en.egress_rate,0)<>10000 THEN 'upgrade_required'
+ WHEN n.protocol_version<25 AND r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND n.ingress_rate+x.egress_rate=10000) THEN 'upgrade_required'
+ WHEN u.quota_bytes>=0 AND (r.egress_group_id IS NULL AND n.ingress_rate+COALESCE(en.egress_rate,0)>0 OR r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND n.ingress_rate+x.egress_rate=0)) AND (u.quota_bytes<=u.traffic_base_bytes+COALESCE((SELECT sum(charged_bytes) FROM current_grants WHERE user_id=u.id),0) OR u.quota_bytes<u.traffic_base_bytes+COALESCE((SELECT sum(issued-released+unlimited_spent) FROM current_grants WHERE user_id=u.id),0)) THEN 'quota_exhausted'
  WHEN r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND x.protocol_version>=24 AND x.last_seen>now()-interval '12 seconds') THEN 'offline'
 	 WHEN n.last_seen IS NULL OR n.last_seen<now()-interval '12 seconds' OR (en.id IS NOT NULL AND (en.last_seen IS NULL OR en.last_seen<now()-interval '12 seconds')) THEN 'offline'
 	 WHEN $3 AND (n.protocol_version<14 OR (en.id IS NOT NULL AND en.protocol_version<14)) THEN 'upgrade_required'
@@ -361,7 +373,12 @@ func (s *Server) rules(w http.ResponseWriter, r *http.Request) {
  WHEN r.tls_inbound_id IS NOT NULL AND ti.config->>'enabled'<>'true' THEN 'inbound_disabled'
  WHEN (r.proxy_accept<>'off' OR ti.config->>'proxy_accept'='auto') AND $4 THEN 'proxy_untrusted'
  WHEN en.tunnel_protocol='tls_tcp' AND en.tls_config->>'padding_enabled'='true' AND (n.protocol_version<23 OR en.protocol_version<23) THEN 'upgrade_required'
- WHEN en.tunnel_protocol IN ('plain_udp','dtls_udp') AND (n.protocol_version<17 OR en.protocol_version<17) THEN 'upgrade_required'
+ WHEN en.tunnel_protocol='tls_h3' AND en.tls_config->'quic_padding'->>'enabled'='true' AND (n.protocol_version<29 OR en.protocol_version<29) THEN 'upgrade_required'
+ WHEN r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND (x.tunnel_protocol<>'tls_h3' OR x.tls_config->'quic_padding'->>'enabled' IS DISTINCT FROM 'true' OR (n.protocol_version>=29 AND x.protocol_version>=29))) THEN 'upgrade_required'
+ WHEN en.tunnel_protocol='tls_h3' AND (n.protocol_version<28 OR en.protocol_version<28) THEN 'upgrade_required'
+ WHEN en.tunnel_protocol='random_udp' AND (n.protocol_version<27 OR en.protocol_version<27) THEN 'upgrade_required'
+ WHEN en.tunnel_protocol IN ('random_tcp','random_h2') AND (n.protocol_version<26 OR en.protocol_version<26) THEN 'upgrade_required'
+ WHEN en.tunnel_protocol IN ('plain_udp','dtls_udp','random_udp') AND (n.protocol_version<17 OR en.protocol_version<17) THEN 'upgrade_required'
  WHEN r.protocol<>'tcp' AND (n.protocol_version<16 OR (en.id IS NOT NULL AND en.protocol_version<16)) THEN 'upgrade_required'
  WHEN r.proxy_accept='auto' AND n.protocol_version<10 THEN 'upgrade_required'
 	 WHEN en.tunnel_protocol='tls_h2' AND (n.protocol_version<11 OR en.protocol_version<11) THEN 'upgrade_required'
@@ -372,15 +389,9 @@ func (s *Server) rules(w http.ResponseWriter, r *http.Request) {
 		s.dbError(w, e)
 		return
 	}
-	v, e := pgx.CollectRows(rows, pgx.RowToMap)
-	if e != nil {
-		s.dbError(w, e)
-		return
-	}
-	for _, rule := range v {
+	s.sendRowsWith(w, rows, nil, func(rule map[string]any) {
 		rule["proxy_trusted_cidrs"] = settings.ProxyTrustedCIDRs
-	}
-	writeJSON(w, 200, v)
+	})
 }
 func (s *Server) deleteRule(w http.ResponseWriter, r *http.Request) {
 	id, validID := resourceID(w, r)

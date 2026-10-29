@@ -24,7 +24,7 @@ var errTunnelTarget = errors.New("tunnel target unavailable")
 func peerRule(r *pb.Rule, p *pb.EgressPeer) *pb.Rule {
 	// Dialing needs only authentication and peer configuration. Cloning the
 	// entire rule here would copy every peer's certificate once per candidate.
-	return &pb.Rule{Id: r.Id, UserId: r.UserId, IngressNodeId: r.IngressNodeId, QuotaEpoch: r.QuotaEpoch, Protocol: r.Protocol, EgressNodeId: p.NodeId, TunnelHost: p.Host, TunnelPort: p.Port, TunnelToken: p.Token, TunnelProtocol: p.Protocol, Tls: p.Tls}
+	return &pb.Rule{Id: r.Id, UserId: r.UserId, IngressNodeId: r.IngressNodeId, QuotaEpoch: r.QuotaEpoch, Protocol: r.Protocol, TrafficRate: p.TrafficRate, MeteringConfigured: r.MeteringConfigured, EgressNodeId: p.NodeId, TunnelHost: p.Host, TunnelPort: p.Port, TunnelToken: p.Token, TunnelProtocol: p.Protocol, Tls: p.Tls, Random: p.Random}
 }
 func peerKey(r *pb.Rule) string {
 	return fmt.Sprint(r.EgressNodeId) + "/" + r.TunnelToken + "/" + h2PoolKey(r)
@@ -311,7 +311,7 @@ func (m *egressManager) dial(ctx, lifetime context.Context, r *pb.Rule, target s
 			m.outcome(key, err)
 		}
 		if err == nil {
-			return c, release, nil
+			return &billedConn{Conn: c, rate: ruleRate(v)}, release, nil
 		}
 		release()
 		if errors.Is(err, errTunnelTarget) {
@@ -330,6 +330,12 @@ func (m *egressManager) dial(ctx, lifetime context.Context, r *pb.Rule, target s
 func dialEgress(ctx, lifetime context.Context, r *pb.Rule, target string, udp bool, h2 *h2Transport, queued *atomic.Int64) (net.Conn, error) {
 	if udp {
 		return dialDatagramTunnel(ctx, lifetime, r, target, h2, queued)
+	}
+	if tunnel.H3(r.TunnelProtocol) {
+		if h2 == nil {
+			return nil, errors.New("HTTP/3 transport unavailable")
+		}
+		return h2.h3.Dial(ctx, lifetime, r, target, false, queued)
 	}
 	if tunnel.H2(r.TunnelProtocol) {
 		if h2 == nil {
@@ -402,6 +408,13 @@ func (m *egressManager) close() { m.cancel(); <-m.done }
 func sameRuntimeRule(a, b *pb.Rule) bool {
 	if a.GetEgressGroupId() == 0 || a.GetEgressGroupId() != b.GetEgressGroupId() {
 		return proto.Equal(a, b)
+	}
+	for _, old := range a.EgressPeers {
+		for _, next := range b.EgressPeers {
+			if old.NodeId == next.NodeId && old.TrafficRate != next.TrafficRate {
+				return false
+			}
+		}
 	}
 	a = proto.Clone(a).(*pb.Rule)
 	b = proto.Clone(b).(*pb.Rule)

@@ -30,6 +30,7 @@ type Usage struct {
 	UnlimitedSpent int64                  `protobuf:"varint,5,opt,name=unlimited_spent,json=unlimitedSpent,proto3" json:"unlimited_spent,omitempty"`
 	QuotaUnlimited bool                   `protobuf:"varint,6,opt,name=quota_unlimited,json=quotaUnlimited,proto3" json:"quota_unlimited,omitempty"`
 	QuotaEpoch     int64                  `protobuf:"varint,7,opt,name=quota_epoch,json=quotaEpoch,proto3" json:"quota_epoch,omitempty"`
+	ChargedBytes   int64                  `protobuf:"varint,8,opt,name=charged_bytes,json=chargedBytes,proto3" json:"charged_bytes,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -109,6 +110,13 @@ func (x *Usage) GetQuotaUnlimited() bool {
 func (x *Usage) GetQuotaEpoch() int64 {
 	if x != nil {
 		return x.QuotaEpoch
+	}
+	return 0
+}
+
+func (x *Usage) GetChargedBytes() int64 {
+	if x != nil {
+		return x.ChargedBytes
 	}
 	return 0
 }
@@ -398,18 +406,20 @@ func (x *PublicIPStatus) GetCheckedUnix() int64 {
 }
 
 type UserPolicy struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Id             int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Enabled        bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	ExpiresUnix    int64                  `protobuf:"varint,3,opt,name=expires_unix,json=expiresUnix,proto3" json:"expires_unix,omitempty"`
-	SpeedBps       int64                  `protobuf:"varint,4,opt,name=speed_bps,json=speedBps,proto3" json:"speed_bps,omitempty"`
-	Issued         int64                  `protobuf:"varint,5,opt,name=issued,proto3" json:"issued,omitempty"`
-	MaxConnections int64                  `protobuf:"varint,6,opt,name=max_connections,json=maxConnections,proto3" json:"max_connections,omitempty"`
-	IpLimit        int32                  `protobuf:"varint,7,opt,name=ip_limit,json=ipLimit,proto3" json:"ip_limit,omitempty"`
-	QuotaUnlimited bool                   `protobuf:"varint,8,opt,name=quota_unlimited,json=quotaUnlimited,proto3" json:"quota_unlimited,omitempty"`
-	QuotaEpoch     int64                  `protobuf:"varint,9,opt,name=quota_epoch,json=quotaEpoch,proto3" json:"quota_epoch,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Id                 int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Enabled            bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	ExpiresUnix        int64                  `protobuf:"varint,3,opt,name=expires_unix,json=expiresUnix,proto3" json:"expires_unix,omitempty"`
+	SpeedBps           int64                  `protobuf:"varint,4,opt,name=speed_bps,json=speedBps,proto3" json:"speed_bps,omitempty"`
+	Issued             int64                  `protobuf:"varint,5,opt,name=issued,proto3" json:"issued,omitempty"`
+	MaxConnections     int64                  `protobuf:"varint,6,opt,name=max_connections,json=maxConnections,proto3" json:"max_connections,omitempty"`
+	IpLimit            int32                  `protobuf:"varint,7,opt,name=ip_limit,json=ipLimit,proto3" json:"ip_limit,omitempty"`
+	QuotaUnlimited     bool                   `protobuf:"varint,8,opt,name=quota_unlimited,json=quotaUnlimited,proto3" json:"quota_unlimited,omitempty"`
+	QuotaEpoch         int64                  `protobuf:"varint,9,opt,name=quota_epoch,json=quotaEpoch,proto3" json:"quota_epoch,omitempty"`
+	MeteringConfigured bool                   `protobuf:"varint,10,opt,name=metering_configured,json=meteringConfigured,proto3" json:"metering_configured,omitempty"`
+	QuotaBlocked       bool                   `protobuf:"varint,11,opt,name=quota_blocked,json=quotaBlocked,proto3" json:"quota_blocked,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *UserPolicy) Reset() {
@@ -505,6 +515,20 @@ func (x *UserPolicy) GetQuotaEpoch() int64 {
 	return 0
 }
 
+func (x *UserPolicy) GetMeteringConfigured() bool {
+	if x != nil {
+		return x.MeteringConfigured
+	}
+	return false
+}
+
+func (x *UserPolicy) GetQuotaBlocked() bool {
+	if x != nil {
+		return x.QuotaBlocked
+	}
+	return false
+}
+
 type Rule struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	Id                    int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -541,6 +565,9 @@ type Rule struct {
 	HealthIntervalSeconds int32                  `protobuf:"varint,32,opt,name=health_interval_seconds,json=healthIntervalSeconds,proto3" json:"health_interval_seconds,omitempty"`
 	HealthFailures        int32                  `protobuf:"varint,33,opt,name=health_failures,json=healthFailures,proto3" json:"health_failures,omitempty"`
 	HealthSuccesses       int32                  `protobuf:"varint,34,opt,name=health_successes,json=healthSuccesses,proto3" json:"health_successes,omitempty"`
+	TrafficRate           int64                  `protobuf:"varint,35,opt,name=traffic_rate,json=trafficRate,proto3" json:"traffic_rate,omitempty"`
+	MeteringConfigured    bool                   `protobuf:"varint,36,opt,name=metering_configured,json=meteringConfigured,proto3" json:"metering_configured,omitempty"`
+	Random                *RandomConfig          `protobuf:"bytes,37,opt,name=random,proto3" json:"random,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -813,6 +840,27 @@ func (x *Rule) GetHealthSuccesses() int32 {
 	return 0
 }
 
+func (x *Rule) GetTrafficRate() int64 {
+	if x != nil {
+		return x.TrafficRate
+	}
+	return 0
+}
+
+func (x *Rule) GetMeteringConfigured() bool {
+	if x != nil {
+		return x.MeteringConfigured
+	}
+	return false
+}
+
+func (x *Rule) GetRandom() *RandomConfig {
+	if x != nil {
+		return x.Random
+	}
+	return nil
+}
+
 type EgressPeer struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        int64                  `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
@@ -823,6 +871,8 @@ type EgressPeer struct {
 	Tls           *TLSClientConfig       `protobuf:"bytes,6,opt,name=tls,proto3" json:"tls,omitempty"`
 	Weight        int32                  `protobuf:"varint,7,opt,name=weight,proto3" json:"weight,omitempty"`
 	Standby       bool                   `protobuf:"varint,8,opt,name=standby,proto3" json:"standby,omitempty"`
+	TrafficRate   int64                  `protobuf:"varint,9,opt,name=traffic_rate,json=trafficRate,proto3" json:"traffic_rate,omitempty"`
+	Random        *RandomConfig          `protobuf:"bytes,10,opt,name=random,proto3" json:"random,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -911,6 +961,20 @@ func (x *EgressPeer) GetStandby() bool {
 		return x.Standby
 	}
 	return false
+}
+
+func (x *EgressPeer) GetTrafficRate() int64 {
+	if x != nil {
+		return x.TrafficRate
+	}
+	return 0
+}
+
+func (x *EgressPeer) GetRandom() *RandomConfig {
+	if x != nil {
+		return x.Random
+	}
+	return nil
 }
 
 type OriginTLSConfig struct {
@@ -1441,16 +1505,18 @@ func (x *ControlMessage) GetStateRestore() *StateRestore {
 }
 
 type UserStateBaseline struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	UserId         int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	QuotaEpoch     int64                  `protobuf:"varint,2,opt,name=quota_epoch,json=quotaEpoch,proto3" json:"quota_epoch,omitempty"`
-	Issued         int64                  `protobuf:"varint,3,opt,name=issued,proto3" json:"issued,omitempty"`
-	Spent          int64                  `protobuf:"varint,4,opt,name=spent,proto3" json:"spent,omitempty"`
-	Released       int64                  `protobuf:"varint,5,opt,name=released,proto3" json:"released,omitempty"`
-	Traffic        int64                  `protobuf:"varint,6,opt,name=traffic,proto3" json:"traffic,omitempty"`
-	UnlimitedSpent int64                  `protobuf:"varint,7,opt,name=unlimited_spent,json=unlimitedSpent,proto3" json:"unlimited_spent,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	UserId             int64                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	QuotaEpoch         int64                  `protobuf:"varint,2,opt,name=quota_epoch,json=quotaEpoch,proto3" json:"quota_epoch,omitempty"`
+	Issued             int64                  `protobuf:"varint,3,opt,name=issued,proto3" json:"issued,omitempty"`
+	Spent              int64                  `protobuf:"varint,4,opt,name=spent,proto3" json:"spent,omitempty"`
+	Released           int64                  `protobuf:"varint,5,opt,name=released,proto3" json:"released,omitempty"`
+	Traffic            int64                  `protobuf:"varint,6,opt,name=traffic,proto3" json:"traffic,omitempty"`
+	UnlimitedSpent     int64                  `protobuf:"varint,7,opt,name=unlimited_spent,json=unlimitedSpent,proto3" json:"unlimited_spent,omitempty"`
+	ChargedBytes       int64                  `protobuf:"varint,8,opt,name=charged_bytes,json=chargedBytes,proto3" json:"charged_bytes,omitempty"`
+	MeteringConfigured bool                   `protobuf:"varint,9,opt,name=metering_configured,json=meteringConfigured,proto3" json:"metering_configured,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *UserStateBaseline) Reset() {
@@ -1530,6 +1596,20 @@ func (x *UserStateBaseline) GetUnlimitedSpent() int64 {
 		return x.UnlimitedSpent
 	}
 	return 0
+}
+
+func (x *UserStateBaseline) GetChargedBytes() int64 {
+	if x != nil {
+		return x.ChargedBytes
+	}
+	return 0
+}
+
+func (x *UserStateBaseline) GetMeteringConfigured() bool {
+	if x != nil {
+		return x.MeteringConfigured
+	}
+	return false
 }
 
 type StateRestore struct {
@@ -1740,6 +1820,7 @@ type NodeConfig struct {
 	TlsInbounds           []*SharedTLSInbound    `protobuf:"bytes,24,rep,name=tls_inbounds,json=tlsInbounds,proto3" json:"tls_inbounds,omitempty"`
 	TlsInboundOnly        bool                   `protobuf:"varint,25,opt,name=tls_inbound_only,json=tlsInboundOnly,proto3" json:"tls_inbound_only,omitempty"`
 	AcmeHttp              []*ACMEHTTPEndpoint    `protobuf:"bytes,26,rep,name=acme_http,json=acmeHttp,proto3" json:"acme_http,omitempty"`
+	Random                *RandomConfig          `protobuf:"bytes,27,opt,name=random,proto3" json:"random,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1952,6 +2033,13 @@ func (x *NodeConfig) GetTlsInboundOnly() bool {
 func (x *NodeConfig) GetAcmeHttp() []*ACMEHTTPEndpoint {
 	if x != nil {
 		return x.AcmeHttp
+	}
+	return nil
+}
+
+func (x *NodeConfig) GetRandom() *RandomConfig {
+	if x != nil {
+		return x.Random
 	}
 	return nil
 }
@@ -2221,21 +2309,23 @@ func (x *IPRecoveryStatus) GetError() string {
 }
 
 type DDNSConfig struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Enabled         bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	Generation      int64                  `protobuf:"varint,2,opt,name=generation,proto3" json:"generation,omitempty"`
-	Provider        string                 `protobuf:"bytes,3,opt,name=provider,proto3" json:"provider,omitempty"`
-	RecordName      string                 `protobuf:"bytes,4,opt,name=record_name,json=recordName,proto3" json:"record_name,omitempty"`
-	ZoneId          string                 `protobuf:"bytes,5,opt,name=zone_id,json=zoneId,proto3" json:"zone_id,omitempty"`
-	Token           string                 `protobuf:"bytes,6,opt,name=token,proto3" json:"token,omitempty"`
-	Ipv4            bool                   `protobuf:"varint,7,opt,name=ipv4,proto3" json:"ipv4,omitempty"`
-	Ipv6            bool                   `protobuf:"varint,8,opt,name=ipv6,proto3" json:"ipv6,omitempty"`
-	IntervalSeconds int32                  `protobuf:"varint,9,opt,name=interval_seconds,json=intervalSeconds,proto3" json:"interval_seconds,omitempty"`
-	Ttl             int32                  `protobuf:"varint,10,opt,name=ttl,proto3" json:"ttl,omitempty"`
-	Ipv4Url         string                 `protobuf:"bytes,11,opt,name=ipv4_url,json=ipv4Url,proto3" json:"ipv4_url,omitempty"`
-	Ipv6Url         string                 `protobuf:"bytes,12,opt,name=ipv6_url,json=ipv6Url,proto3" json:"ipv6_url,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Enabled          bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Generation       int64                  `protobuf:"varint,2,opt,name=generation,proto3" json:"generation,omitempty"`
+	Provider         string                 `protobuf:"bytes,3,opt,name=provider,proto3" json:"provider,omitempty"`
+	RecordName       string                 `protobuf:"bytes,4,opt,name=record_name,json=recordName,proto3" json:"record_name,omitempty"`
+	ZoneId           string                 `protobuf:"bytes,5,opt,name=zone_id,json=zoneId,proto3" json:"zone_id,omitempty"`
+	Token            string                 `protobuf:"bytes,6,opt,name=token,proto3" json:"token,omitempty"`
+	Ipv4             bool                   `protobuf:"varint,7,opt,name=ipv4,proto3" json:"ipv4,omitempty"`
+	Ipv6             bool                   `protobuf:"varint,8,opt,name=ipv6,proto3" json:"ipv6,omitempty"`
+	IntervalSeconds  int32                  `protobuf:"varint,9,opt,name=interval_seconds,json=intervalSeconds,proto3" json:"interval_seconds,omitempty"`
+	Ttl              int32                  `protobuf:"varint,10,opt,name=ttl,proto3" json:"ttl,omitempty"`
+	Ipv4Url          string                 `protobuf:"bytes,11,opt,name=ipv4_url,json=ipv4Url,proto3" json:"ipv4_url,omitempty"`
+	Ipv6Url          string                 `protobuf:"bytes,12,opt,name=ipv6_url,json=ipv6Url,proto3" json:"ipv6_url,omitempty"`
+	IpSource         string                 `protobuf:"bytes,13,opt,name=ip_source,json=ipSource,proto3" json:"ip_source,omitempty"`
+	IgnorePrivateIps bool                   `protobuf:"varint,14,opt,name=ignore_private_ips,json=ignorePrivateIps,proto3" json:"ignore_private_ips,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DDNSConfig) Reset() {
@@ -2352,6 +2442,20 @@ func (x *DDNSConfig) GetIpv6Url() string {
 	return ""
 }
 
+func (x *DDNSConfig) GetIpSource() string {
+	if x != nil {
+		return x.IpSource
+	}
+	return ""
+}
+
+func (x *DDNSConfig) GetIgnorePrivateIps() bool {
+	if x != nil {
+		return x.IgnorePrivateIps
+	}
+	return false
+}
+
 type DDNSStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Generation    int64                  `protobuf:"varint,1,opt,name=generation,proto3" json:"generation,omitempty"`
@@ -2460,6 +2564,126 @@ func (x *DDNSStatus) GetObservedIpv6() string {
 	return ""
 }
 
+type RandomConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cipher        string                 `protobuf:"bytes,1,opt,name=cipher,proto3" json:"cipher,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RandomConfig) Reset() {
+	*x = RandomConfig{}
+	mi := &file_api_control_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RandomConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RandomConfig) ProtoMessage() {}
+
+func (x *RandomConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_api_control_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RandomConfig.ProtoReflect.Descriptor instead.
+func (*RandomConfig) Descriptor() ([]byte, []int) {
+	return file_api_control_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RandomConfig) GetCipher() string {
+	if x != nil {
+		return x.Cipher
+	}
+	return ""
+}
+
+func (x *RandomConfig) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+type QUICPaddingConfig struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Enabled        bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	MaxPadding     int32                  `protobuf:"varint,2,opt,name=max_padding,json=maxPadding,proto3" json:"max_padding,omitempty"`
+	BurstBytes     int32                  `protobuf:"varint,3,opt,name=burst_bytes,json=burstBytes,proto3" json:"burst_bytes,omitempty"`
+	BytesPerSecond int32                  `protobuf:"varint,4,opt,name=bytes_per_second,json=bytesPerSecond,proto3" json:"bytes_per_second,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *QUICPaddingConfig) Reset() {
+	*x = QUICPaddingConfig{}
+	mi := &file_api_control_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QUICPaddingConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QUICPaddingConfig) ProtoMessage() {}
+
+func (x *QUICPaddingConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_api_control_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QUICPaddingConfig.ProtoReflect.Descriptor instead.
+func (*QUICPaddingConfig) Descriptor() ([]byte, []int) {
+	return file_api_control_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *QUICPaddingConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *QUICPaddingConfig) GetMaxPadding() int32 {
+	if x != nil {
+		return x.MaxPadding
+	}
+	return 0
+}
+
+func (x *QUICPaddingConfig) GetBurstBytes() int32 {
+	if x != nil {
+		return x.BurstBytes
+	}
+	return 0
+}
+
+func (x *QUICPaddingConfig) GetBytesPerSecond() int32 {
+	if x != nil {
+		return x.BytesPerSecond
+	}
+	return 0
+}
+
 type TLSClientConfig struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	ServerName           string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
@@ -2474,13 +2698,15 @@ type TLSClientConfig struct {
 	SequenceAuth         bool                   `protobuf:"varint,10,opt,name=sequence_auth,json=sequenceAuth,proto3" json:"sequence_auth,omitempty"`
 	PaddingEnabled       bool                   `protobuf:"varint,11,opt,name=padding_enabled,json=paddingEnabled,proto3" json:"padding_enabled,omitempty"`
 	PaddingScheme        []string               `protobuf:"bytes,12,rep,name=padding_scheme,json=paddingScheme,proto3" json:"padding_scheme,omitempty"`
+	MaxStreams           int32                  `protobuf:"varint,13,opt,name=max_streams,json=maxStreams,proto3" json:"max_streams,omitempty"`
+	QuicPadding          *QUICPaddingConfig     `protobuf:"bytes,14,opt,name=quic_padding,json=quicPadding,proto3" json:"quic_padding,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
 
 func (x *TLSClientConfig) Reset() {
 	*x = TLSClientConfig{}
-	mi := &file_api_control_proto_msgTypes[22]
+	mi := &file_api_control_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2492,7 +2718,7 @@ func (x *TLSClientConfig) String() string {
 func (*TLSClientConfig) ProtoMessage() {}
 
 func (x *TLSClientConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_api_control_proto_msgTypes[22]
+	mi := &file_api_control_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2505,7 +2731,7 @@ func (x *TLSClientConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TLSClientConfig.ProtoReflect.Descriptor instead.
 func (*TLSClientConfig) Descriptor() ([]byte, []int) {
-	return file_api_control_proto_rawDescGZIP(), []int{22}
+	return file_api_control_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *TLSClientConfig) GetServerName() string {
@@ -2592,6 +2818,20 @@ func (x *TLSClientConfig) GetPaddingScheme() []string {
 	return nil
 }
 
+func (x *TLSClientConfig) GetMaxStreams() int32 {
+	if x != nil {
+		return x.MaxStreams
+	}
+	return 0
+}
+
+func (x *TLSClientConfig) GetQuicPadding() *QUICPaddingConfig {
+	if x != nil {
+		return x.QuicPadding
+	}
+	return nil
+}
+
 type TLSServerConfig struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	ServerName          string                 `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
@@ -2608,13 +2848,15 @@ type TLSServerConfig struct {
 	FallbackUrl         string                 `protobuf:"bytes,12,opt,name=fallback_url,json=fallbackUrl,proto3" json:"fallback_url,omitempty"`
 	PaddingEnabled      bool                   `protobuf:"varint,13,opt,name=padding_enabled,json=paddingEnabled,proto3" json:"padding_enabled,omitempty"`
 	PaddingScheme       []string               `protobuf:"bytes,14,rep,name=padding_scheme,json=paddingScheme,proto3" json:"padding_scheme,omitempty"`
+	PublicPort          int32                  `protobuf:"varint,15,opt,name=public_port,json=publicPort,proto3" json:"public_port,omitempty"`
+	QuicPadding         *QUICPaddingConfig     `protobuf:"bytes,16,opt,name=quic_padding,json=quicPadding,proto3" json:"quic_padding,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
 func (x *TLSServerConfig) Reset() {
 	*x = TLSServerConfig{}
-	mi := &file_api_control_proto_msgTypes[23]
+	mi := &file_api_control_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2626,7 +2868,7 @@ func (x *TLSServerConfig) String() string {
 func (*TLSServerConfig) ProtoMessage() {}
 
 func (x *TLSServerConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_api_control_proto_msgTypes[23]
+	mi := &file_api_control_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2639,7 +2881,7 @@ func (x *TLSServerConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TLSServerConfig.ProtoReflect.Descriptor instead.
 func (*TLSServerConfig) Descriptor() ([]byte, []int) {
-	return file_api_control_proto_rawDescGZIP(), []int{23}
+	return file_api_control_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *TLSServerConfig) GetServerName() string {
@@ -2740,6 +2982,20 @@ func (x *TLSServerConfig) GetPaddingScheme() []string {
 	return nil
 }
 
+func (x *TLSServerConfig) GetPublicPort() int32 {
+	if x != nil {
+		return x.PublicPort
+	}
+	return 0
+}
+
+func (x *TLSServerConfig) GetQuicPadding() *QUICPaddingConfig {
+	if x != nil {
+		return x.QuicPadding
+	}
+	return nil
+}
+
 type ACMEChallenge struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Domain           string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
@@ -2753,7 +3009,7 @@ type ACMEChallenge struct {
 
 func (x *ACMEChallenge) Reset() {
 	*x = ACMEChallenge{}
-	mi := &file_api_control_proto_msgTypes[24]
+	mi := &file_api_control_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2765,7 +3021,7 @@ func (x *ACMEChallenge) String() string {
 func (*ACMEChallenge) ProtoMessage() {}
 
 func (x *ACMEChallenge) ProtoReflect() protoreflect.Message {
-	mi := &file_api_control_proto_msgTypes[24]
+	mi := &file_api_control_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2778,7 +3034,7 @@ func (x *ACMEChallenge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ACMEChallenge.ProtoReflect.Descriptor instead.
 func (*ACMEChallenge) Descriptor() ([]byte, []int) {
-	return file_api_control_proto_rawDescGZIP(), []int{24}
+	return file_api_control_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ACMEChallenge) GetDomain() string {
@@ -2817,33 +3073,42 @@ func (x *ACMEChallenge) GetExpiresUnix() int64 {
 }
 
 type Probe struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	SampledAt        int64                  `protobuf:"varint,1,opt,name=sampled_at,json=sampledAt,proto3" json:"sampled_at,omitempty"`
-	CpuPercent       float64                `protobuf:"fixed64,2,opt,name=cpu_percent,json=cpuPercent,proto3" json:"cpu_percent,omitempty"`
-	MemoryTotal      int64                  `protobuf:"varint,3,opt,name=memory_total,json=memoryTotal,proto3" json:"memory_total,omitempty"`
-	MemoryUsed       int64                  `protobuf:"varint,4,opt,name=memory_used,json=memoryUsed,proto3" json:"memory_used,omitempty"`
-	DiskTotal        int64                  `protobuf:"varint,5,opt,name=disk_total,json=diskTotal,proto3" json:"disk_total,omitempty"`
-	DiskUsed         int64                  `protobuf:"varint,6,opt,name=disk_used,json=diskUsed,proto3" json:"disk_used,omitempty"`
-	RxMbps           float64                `protobuf:"fixed64,7,opt,name=rx_mbps,json=rxMbps,proto3" json:"rx_mbps,omitempty"`
-	TxMbps           float64                `protobuf:"fixed64,8,opt,name=tx_mbps,json=txMbps,proto3" json:"tx_mbps,omitempty"`
-	TcpConnections   int64                  `protobuf:"varint,9,opt,name=tcp_connections,json=tcpConnections,proto3" json:"tcp_connections,omitempty"`
-	UdpSockets       int64                  `protobuf:"varint,10,opt,name=udp_sockets,json=udpSockets,proto3" json:"udp_sockets,omitempty"`
-	Load1            float64                `protobuf:"fixed64,11,opt,name=load1,proto3" json:"load1,omitempty"`
-	Load5            float64                `protobuf:"fixed64,12,opt,name=load5,proto3" json:"load5,omitempty"`
-	Load15           float64                `protobuf:"fixed64,13,opt,name=load15,proto3" json:"load15,omitempty"`
-	CpuReady         bool                   `protobuf:"varint,14,opt,name=cpu_ready,json=cpuReady,proto3" json:"cpu_ready,omitempty"`
-	MemoryReady      bool                   `protobuf:"varint,15,opt,name=memory_ready,json=memoryReady,proto3" json:"memory_ready,omitempty"`
-	DiskReady        bool                   `protobuf:"varint,16,opt,name=disk_ready,json=diskReady,proto3" json:"disk_ready,omitempty"`
-	NetworkReady     bool                   `protobuf:"varint,17,opt,name=network_ready,json=networkReady,proto3" json:"network_ready,omitempty"`
-	ConnectionsReady bool                   `protobuf:"varint,18,opt,name=connections_ready,json=connectionsReady,proto3" json:"connections_ready,omitempty"`
-	LoadReady        bool                   `protobuf:"varint,19,opt,name=load_ready,json=loadReady,proto3" json:"load_ready,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	SampledAt               int64                  `protobuf:"varint,1,opt,name=sampled_at,json=sampledAt,proto3" json:"sampled_at,omitempty"`
+	CpuPercent              float64                `protobuf:"fixed64,2,opt,name=cpu_percent,json=cpuPercent,proto3" json:"cpu_percent,omitempty"`
+	MemoryTotal             int64                  `protobuf:"varint,3,opt,name=memory_total,json=memoryTotal,proto3" json:"memory_total,omitempty"`
+	MemoryUsed              int64                  `protobuf:"varint,4,opt,name=memory_used,json=memoryUsed,proto3" json:"memory_used,omitempty"`
+	DiskTotal               int64                  `protobuf:"varint,5,opt,name=disk_total,json=diskTotal,proto3" json:"disk_total,omitempty"`
+	DiskUsed                int64                  `protobuf:"varint,6,opt,name=disk_used,json=diskUsed,proto3" json:"disk_used,omitempty"`
+	RxMbps                  float64                `protobuf:"fixed64,7,opt,name=rx_mbps,json=rxMbps,proto3" json:"rx_mbps,omitempty"`
+	TxMbps                  float64                `protobuf:"fixed64,8,opt,name=tx_mbps,json=txMbps,proto3" json:"tx_mbps,omitempty"`
+	TcpConnections          int64                  `protobuf:"varint,9,opt,name=tcp_connections,json=tcpConnections,proto3" json:"tcp_connections,omitempty"`
+	UdpSockets              int64                  `protobuf:"varint,10,opt,name=udp_sockets,json=udpSockets,proto3" json:"udp_sockets,omitempty"`
+	Load1                   float64                `protobuf:"fixed64,11,opt,name=load1,proto3" json:"load1,omitempty"`
+	Load5                   float64                `protobuf:"fixed64,12,opt,name=load5,proto3" json:"load5,omitempty"`
+	Load15                  float64                `protobuf:"fixed64,13,opt,name=load15,proto3" json:"load15,omitempty"`
+	CpuReady                bool                   `protobuf:"varint,14,opt,name=cpu_ready,json=cpuReady,proto3" json:"cpu_ready,omitempty"`
+	MemoryReady             bool                   `protobuf:"varint,15,opt,name=memory_ready,json=memoryReady,proto3" json:"memory_ready,omitempty"`
+	DiskReady               bool                   `protobuf:"varint,16,opt,name=disk_ready,json=diskReady,proto3" json:"disk_ready,omitempty"`
+	NetworkReady            bool                   `protobuf:"varint,17,opt,name=network_ready,json=networkReady,proto3" json:"network_ready,omitempty"`
+	ConnectionsReady        bool                   `protobuf:"varint,18,opt,name=connections_ready,json=connectionsReady,proto3" json:"connections_ready,omitempty"`
+	LoadReady               bool                   `protobuf:"varint,19,opt,name=load_ready,json=loadReady,proto3" json:"load_ready,omitempty"`
+	UptimeSeconds           int64                  `protobuf:"varint,20,opt,name=uptime_seconds,json=uptimeSeconds,proto3" json:"uptime_seconds,omitempty"`
+	UptimeReady             bool                   `protobuf:"varint,21,opt,name=uptime_ready,json=uptimeReady,proto3" json:"uptime_ready,omitempty"`
+	DiskReadBytesPerSecond  float64                `protobuf:"fixed64,22,opt,name=disk_read_bytes_per_second,json=diskReadBytesPerSecond,proto3" json:"disk_read_bytes_per_second,omitempty"`
+	DiskWriteBytesPerSecond float64                `protobuf:"fixed64,23,opt,name=disk_write_bytes_per_second,json=diskWriteBytesPerSecond,proto3" json:"disk_write_bytes_per_second,omitempty"`
+	DiskIoReady             bool                   `protobuf:"varint,24,opt,name=disk_io_ready,json=diskIoReady,proto3" json:"disk_io_ready,omitempty"`
+	DiskDevice              string                 `protobuf:"bytes,25,opt,name=disk_device,json=diskDevice,proto3" json:"disk_device,omitempty"`
+	BootId                  string                 `protobuf:"bytes,26,opt,name=boot_id,json=bootId,proto3" json:"boot_id,omitempty"`
+	NetworkCounters         []*InterfaceTraffic    `protobuf:"bytes,27,rep,name=network_counters,json=networkCounters,proto3" json:"network_counters,omitempty"`
+	NetworkCountersReady    bool                   `protobuf:"varint,28,opt,name=network_counters_ready,json=networkCountersReady,proto3" json:"network_counters_ready,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *Probe) Reset() {
 	*x = Probe{}
-	mi := &file_api_control_proto_msgTypes[25]
+	mi := &file_api_control_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2855,7 +3120,7 @@ func (x *Probe) String() string {
 func (*Probe) ProtoMessage() {}
 
 func (x *Probe) ProtoReflect() protoreflect.Message {
-	mi := &file_api_control_proto_msgTypes[25]
+	mi := &file_api_control_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2868,7 +3133,7 @@ func (x *Probe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Probe.ProtoReflect.Descriptor instead.
 func (*Probe) Descriptor() ([]byte, []int) {
-	return file_api_control_proto_rawDescGZIP(), []int{25}
+	return file_api_control_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Probe) GetSampledAt() int64 {
@@ -3004,11 +3269,134 @@ func (x *Probe) GetLoadReady() bool {
 	return false
 }
 
+func (x *Probe) GetUptimeSeconds() int64 {
+	if x != nil {
+		return x.UptimeSeconds
+	}
+	return 0
+}
+
+func (x *Probe) GetUptimeReady() bool {
+	if x != nil {
+		return x.UptimeReady
+	}
+	return false
+}
+
+func (x *Probe) GetDiskReadBytesPerSecond() float64 {
+	if x != nil {
+		return x.DiskReadBytesPerSecond
+	}
+	return 0
+}
+
+func (x *Probe) GetDiskWriteBytesPerSecond() float64 {
+	if x != nil {
+		return x.DiskWriteBytesPerSecond
+	}
+	return 0
+}
+
+func (x *Probe) GetDiskIoReady() bool {
+	if x != nil {
+		return x.DiskIoReady
+	}
+	return false
+}
+
+func (x *Probe) GetDiskDevice() string {
+	if x != nil {
+		return x.DiskDevice
+	}
+	return ""
+}
+
+func (x *Probe) GetBootId() string {
+	if x != nil {
+		return x.BootId
+	}
+	return ""
+}
+
+func (x *Probe) GetNetworkCounters() []*InterfaceTraffic {
+	if x != nil {
+		return x.NetworkCounters
+	}
+	return nil
+}
+
+func (x *Probe) GetNetworkCountersReady() bool {
+	if x != nil {
+		return x.NetworkCountersReady
+	}
+	return false
+}
+
+type InterfaceTraffic struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	RxBytes       int64                  `protobuf:"varint,2,opt,name=rx_bytes,json=rxBytes,proto3" json:"rx_bytes,omitempty"`
+	TxBytes       int64                  `protobuf:"varint,3,opt,name=tx_bytes,json=txBytes,proto3" json:"tx_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InterfaceTraffic) Reset() {
+	*x = InterfaceTraffic{}
+	mi := &file_api_control_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InterfaceTraffic) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InterfaceTraffic) ProtoMessage() {}
+
+func (x *InterfaceTraffic) ProtoReflect() protoreflect.Message {
+	mi := &file_api_control_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InterfaceTraffic.ProtoReflect.Descriptor instead.
+func (*InterfaceTraffic) Descriptor() ([]byte, []int) {
+	return file_api_control_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *InterfaceTraffic) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *InterfaceTraffic) GetRxBytes() int64 {
+	if x != nil {
+		return x.RxBytes
+	}
+	return 0
+}
+
+func (x *InterfaceTraffic) GetTxBytes() int64 {
+	if x != nil {
+		return x.TxBytes
+	}
+	return 0
+}
+
 var File_api_control_proto protoreflect.FileDescriptor
 
 const file_api_control_proto_rawDesc = "" +
 	"\n" +
-	"\x11api/control.proto\x12\vnekopass.v1\"\xdf\x01\n" +
+	"\x11api/control.proto\x12\vnekopass.v1\"\x84\x02\n" +
 	"\x05Usage\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x14\n" +
 	"\x05spent\x18\x02 \x01(\x03R\x05spent\x12\x1a\n" +
@@ -3017,7 +3405,8 @@ const file_api_control_proto_rawDesc = "" +
 	"\x0funlimited_spent\x18\x05 \x01(\x03R\x0eunlimitedSpent\x12'\n" +
 	"\x0fquota_unlimited\x18\x06 \x01(\bR\x0equotaUnlimited\x12\x1f\n" +
 	"\vquota_epoch\x18\a \x01(\x03R\n" +
-	"quotaEpoch\">\n" +
+	"quotaEpoch\x12#\n" +
+	"\rcharged_bytes\x18\b \x01(\x03R\fchargedBytes\">\n" +
 	"\tRuleUsage\x12\x17\n" +
 	"\arule_id\x18\x01 \x01(\x03R\x06ruleId\x12\x18\n" +
 	"\atraffic\x18\x02 \x01(\x03R\atraffic\"\x8b\x06\n" +
@@ -3046,7 +3435,7 @@ const file_api_control_proto_rawDesc = "" +
 	"\x0ePublicIPStatus\x12\x12\n" +
 	"\x04ipv4\x18\x01 \x01(\tR\x04ipv4\x12\x12\n" +
 	"\x04ipv6\x18\x02 \x01(\tR\x04ipv6\x12!\n" +
-	"\fchecked_unix\x18\x03 \x01(\x03R\vcheckedUnix\"\x9c\x02\n" +
+	"\fchecked_unix\x18\x03 \x01(\x03R\vcheckedUnix\"\xf2\x02\n" +
 	"\n" +
 	"UserPolicy\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x18\n" +
@@ -3058,7 +3447,11 @@ const file_api_control_proto_rawDesc = "" +
 	"\bip_limit\x18\a \x01(\x05R\aipLimit\x12'\n" +
 	"\x0fquota_unlimited\x18\b \x01(\bR\x0equotaUnlimited\x12\x1f\n" +
 	"\vquota_epoch\x18\t \x01(\x03R\n" +
-	"quotaEpoch\"\xd3\t\n" +
+	"quotaEpoch\x12/\n" +
+	"\x13metering_configured\x18\n" +
+	" \x01(\bR\x12meteringConfigured\x12#\n" +
+	"\rquota_blocked\x18\v \x01(\bR\fquotaBlocked\"\xda\n" +
+	"\n" +
 	"\x04Rule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\x03R\x06userId\x12\x1f\n" +
@@ -3103,7 +3496,10 @@ const file_api_control_proto_rawDesc = "" +
 	"\x0fegress_strategy\x18\x1f \x01(\tR\x0eegressStrategy\x126\n" +
 	"\x17health_interval_seconds\x18  \x01(\x05R\x15healthIntervalSeconds\x12'\n" +
 	"\x0fhealth_failures\x18! \x01(\x05R\x0ehealthFailures\x12)\n" +
-	"\x10health_successes\x18\" \x01(\x05R\x0fhealthSuccesses\"\xe1\x01\n" +
+	"\x10health_successes\x18\" \x01(\x05R\x0fhealthSuccesses\x12!\n" +
+	"\ftraffic_rate\x18# \x01(\x03R\vtrafficRate\x12/\n" +
+	"\x13metering_configured\x18$ \x01(\bR\x12meteringConfigured\x121\n" +
+	"\x06random\x18% \x01(\v2\x19.nekopass.v1.RandomConfigR\x06random\"\xb7\x02\n" +
 	"\n" +
 	"EgressPeer\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\x03R\x06nodeId\x12\x12\n" +
@@ -3113,7 +3509,10 @@ const file_api_control_proto_rawDesc = "" +
 	"\bprotocol\x18\x05 \x01(\tR\bprotocol\x12.\n" +
 	"\x03tls\x18\x06 \x01(\v2\x1c.nekopass.v1.TLSClientConfigR\x03tls\x12\x16\n" +
 	"\x06weight\x18\a \x01(\x05R\x06weight\x12\x18\n" +
-	"\astandby\x18\b \x01(\bR\astandby\"y\n" +
+	"\astandby\x18\b \x01(\bR\astandby\x12!\n" +
+	"\ftraffic_rate\x18\t \x01(\x03R\vtrafficRate\x121\n" +
+	"\x06random\x18\n" +
+	" \x01(\v2\x19.nekopass.v1.RandomConfigR\x06random\"y\n" +
 	"\x0fOriginTLSConfig\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1f\n" +
 	"\vserver_name\x18\x02 \x01(\tR\n" +
@@ -3167,7 +3566,7 @@ const file_api_control_proto_rawDesc = "" +
 	"\x06update\x18\b \x01(\v2\x1a.nekopass.v1.UpdateRequestR\x06update\x12)\n" +
 	"\x10control_endpoint\x18\t \x01(\tR\x0fcontrolEndpoint\x12>\n" +
 	"\rstate_restore\x18\n" +
-	" \x01(\v2\x19.nekopass.v1.StateRestoreR\fstateRestore\"\xda\x01\n" +
+	" \x01(\v2\x19.nekopass.v1.StateRestoreR\fstateRestore\"\xb0\x02\n" +
 	"\x11UserStateBaseline\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\x03R\x06userId\x12\x1f\n" +
 	"\vquota_epoch\x18\x02 \x01(\x03R\n" +
@@ -3176,7 +3575,9 @@ const file_api_control_proto_rawDesc = "" +
 	"\x05spent\x18\x04 \x01(\x03R\x05spent\x12\x1a\n" +
 	"\breleased\x18\x05 \x01(\x03R\breleased\x12\x18\n" +
 	"\atraffic\x18\x06 \x01(\x03R\atraffic\x12'\n" +
-	"\x0funlimited_spent\x18\a \x01(\x03R\x0eunlimitedSpent\"\x93\x01\n" +
+	"\x0funlimited_spent\x18\a \x01(\x03R\x0eunlimitedSpent\x12#\n" +
+	"\rcharged_bytes\x18\b \x01(\x03R\fchargedBytes\x12/\n" +
+	"\x13metering_configured\x18\t \x01(\bR\x12meteringConfigured\"\x93\x01\n" +
 	"\fStateRestore\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x124\n" +
@@ -3193,7 +3594,7 @@ const file_api_control_proto_rawDesc = "" +
 	"generation\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +
 	"\x05state\x18\x03 \x01(\tR\x05state\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"\x8f\t\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"\xc2\t\n" +
 	"\n" +
 	"NodeConfig\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1f\n" +
@@ -3224,7 +3625,8 @@ const file_api_control_proto_rawDesc = "" +
 	"ipRecovery\x12@\n" +
 	"\ftls_inbounds\x18\x18 \x03(\v2\x1d.nekopass.v1.SharedTLSInboundR\vtlsInbounds\x12(\n" +
 	"\x10tls_inbound_only\x18\x19 \x01(\bR\x0etlsInboundOnly\x12:\n" +
-	"\tacme_http\x18\x1a \x03(\v2\x1d.nekopass.v1.ACMEHTTPEndpointR\bacmeHttp\"\xd6\x03\n" +
+	"\tacme_http\x18\x1a \x03(\v2\x1d.nekopass.v1.ACMEHTTPEndpointR\bacmeHttp\x121\n" +
+	"\x06random\x18\x1b \x01(\v2\x19.nekopass.v1.RandomConfigR\x06random\"\xd6\x03\n" +
 	"\x10IPRecoveryConfig\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1e\n" +
 	"\n" +
@@ -3260,7 +3662,7 @@ const file_api_control_proto_rawDesc = "" +
 	"\x06old_ip\x18\t \x01(\tR\x05oldIp\x12\x15\n" +
 	"\x06new_ip\x18\n" +
 	" \x01(\tR\x05newIp\x12\x14\n" +
-	"\x05error\x18\v \x01(\tR\x05error\"\xcd\x02\n" +
+	"\x05error\x18\v \x01(\tR\x05error\"\x98\x03\n" +
 	"\n" +
 	"DDNSConfig\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1e\n" +
@@ -3278,7 +3680,9 @@ const file_api_control_proto_rawDesc = "" +
 	"\x03ttl\x18\n" +
 	" \x01(\x05R\x03ttl\x12\x19\n" +
 	"\bipv4_url\x18\v \x01(\tR\aipv4Url\x12\x19\n" +
-	"\bipv6_url\x18\f \x01(\tR\aipv6Url\"\x90\x02\n" +
+	"\bipv6_url\x18\f \x01(\tR\aipv6Url\x12\x1b\n" +
+	"\tip_source\x18\r \x01(\tR\bipSource\x12,\n" +
+	"\x12ignore_private_ips\x18\x0e \x01(\bR\x10ignorePrivateIps\"\x90\x02\n" +
 	"\n" +
 	"DDNSStatus\x12\x1e\n" +
 	"\n" +
@@ -3291,7 +3695,17 @@ const file_api_control_proto_rawDesc = "" +
 	"\fupdated_unix\x18\x06 \x01(\x03R\vupdatedUnix\x12\x14\n" +
 	"\x05error\x18\a \x01(\tR\x05error\x12#\n" +
 	"\robserved_ipv4\x18\b \x01(\tR\fobservedIpv4\x12#\n" +
-	"\robserved_ipv6\x18\t \x01(\tR\fobservedIpv6\"\xbd\x03\n" +
+	"\robserved_ipv6\x18\t \x01(\tR\fobservedIpv6\"8\n" +
+	"\fRandomConfig\x12\x16\n" +
+	"\x06cipher\x18\x01 \x01(\tR\x06cipher\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\"\x99\x01\n" +
+	"\x11QUICPaddingConfig\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1f\n" +
+	"\vmax_padding\x18\x02 \x01(\x05R\n" +
+	"maxPadding\x12\x1f\n" +
+	"\vburst_bytes\x18\x03 \x01(\x05R\n" +
+	"burstBytes\x12(\n" +
+	"\x10bytes_per_second\x18\x04 \x01(\x05R\x0ebytesPerSecond\"\xa1\x04\n" +
 	"\x0fTLSClientConfig\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12 \n" +
@@ -3306,7 +3720,10 @@ const file_api_control_proto_rawDesc = "" +
 	"\rsequence_auth\x18\n" +
 	" \x01(\bR\fsequenceAuth\x12'\n" +
 	"\x0fpadding_enabled\x18\v \x01(\bR\x0epaddingEnabled\x12%\n" +
-	"\x0epadding_scheme\x18\f \x03(\tR\rpaddingScheme\"\x93\x04\n" +
+	"\x0epadding_scheme\x18\f \x03(\tR\rpaddingScheme\x12\x1f\n" +
+	"\vmax_streams\x18\r \x01(\x05R\n" +
+	"maxStreams\x12A\n" +
+	"\fquic_padding\x18\x0e \x01(\v2\x1e.nekopass.v1.QUICPaddingConfigR\vquicPadding\"\xf7\x04\n" +
 	"\x0fTLSServerConfig\x12\x1f\n" +
 	"\vserver_name\x18\x01 \x01(\tR\n" +
 	"serverName\x12 \n" +
@@ -3328,13 +3745,16 @@ const file_api_control_proto_rawDesc = "" +
 	"\x04host\x18\v \x01(\tR\x04host\x12!\n" +
 	"\ffallback_url\x18\f \x01(\tR\vfallbackUrl\x12'\n" +
 	"\x0fpadding_enabled\x18\r \x01(\bR\x0epaddingEnabled\x12%\n" +
-	"\x0epadding_scheme\x18\x0e \x03(\tR\rpaddingScheme\"\xa9\x01\n" +
+	"\x0epadding_scheme\x18\x0e \x03(\tR\rpaddingScheme\x12\x1f\n" +
+	"\vpublic_port\x18\x0f \x01(\x05R\n" +
+	"publicPort\x12A\n" +
+	"\fquic_padding\x18\x10 \x01(\v2\x1e.nekopass.v1.QUICPaddingConfigR\vquicPadding\"\xa9\x01\n" +
 	"\rACMEChallenge\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12+\n" +
 	"\x11key_authorization\x18\x03 \x01(\tR\x10keyAuthorization\x12\x1a\n" +
 	"\brevision\x18\x04 \x01(\x03R\brevision\x12!\n" +
-	"\fexpires_unix\x18\x05 \x01(\x03R\vexpiresUnix\"\xd7\x04\n" +
+	"\fexpires_unix\x18\x05 \x01(\x03R\vexpiresUnix\"\xf9\a\n" +
 	"\x05Probe\x12\x1d\n" +
 	"\n" +
 	"sampled_at\x18\x01 \x01(\x03R\tsampledAt\x12\x1f\n" +
@@ -3362,7 +3782,21 @@ const file_api_control_proto_rawDesc = "" +
 	"\rnetwork_ready\x18\x11 \x01(\bR\fnetworkReady\x12+\n" +
 	"\x11connections_ready\x18\x12 \x01(\bR\x10connectionsReady\x12\x1d\n" +
 	"\n" +
-	"load_ready\x18\x13 \x01(\bR\tloadReady2P\n" +
+	"load_ready\x18\x13 \x01(\bR\tloadReady\x12%\n" +
+	"\x0euptime_seconds\x18\x14 \x01(\x03R\ruptimeSeconds\x12!\n" +
+	"\fuptime_ready\x18\x15 \x01(\bR\vuptimeReady\x12:\n" +
+	"\x1adisk_read_bytes_per_second\x18\x16 \x01(\x01R\x16diskReadBytesPerSecond\x12<\n" +
+	"\x1bdisk_write_bytes_per_second\x18\x17 \x01(\x01R\x17diskWriteBytesPerSecond\x12\"\n" +
+	"\rdisk_io_ready\x18\x18 \x01(\bR\vdiskIoReady\x12\x1f\n" +
+	"\vdisk_device\x18\x19 \x01(\tR\n" +
+	"diskDevice\x12\x17\n" +
+	"\aboot_id\x18\x1a \x01(\tR\x06bootId\x12H\n" +
+	"\x10network_counters\x18\x1b \x03(\v2\x1d.nekopass.v1.InterfaceTrafficR\x0fnetworkCounters\x124\n" +
+	"\x16network_counters_ready\x18\x1c \x01(\bR\x14networkCountersReady\"\\\n" +
+	"\x10InterfaceTraffic\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
+	"\brx_bytes\x18\x02 \x01(\x03R\arxBytes\x12\x19\n" +
+	"\btx_bytes\x18\x03 \x01(\x03R\atxBytes2P\n" +
 	"\aControl\x12E\n" +
 	"\aConnect\x12\x19.nekopass.v1.AgentMessage\x1a\x1b.nekopass.v1.ControlMessage(\x010\x01B0Z.github.com/nekopass/nekopass/internal/protocolb\x06proto3"
 
@@ -3378,7 +3812,7 @@ func file_api_control_proto_rawDescGZIP() []byte {
 	return file_api_control_proto_rawDescData
 }
 
-var file_api_control_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_api_control_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_api_control_proto_goTypes = []any{
 	(*Usage)(nil),             // 0: nekopass.v1.Usage
 	(*RuleUsage)(nil),         // 1: nekopass.v1.RuleUsage
@@ -3402,47 +3836,56 @@ var file_api_control_proto_goTypes = []any{
 	(*IPRecoveryStatus)(nil),  // 19: nekopass.v1.IPRecoveryStatus
 	(*DDNSConfig)(nil),        // 20: nekopass.v1.DDNSConfig
 	(*DDNSStatus)(nil),        // 21: nekopass.v1.DDNSStatus
-	(*TLSClientConfig)(nil),   // 22: nekopass.v1.TLSClientConfig
-	(*TLSServerConfig)(nil),   // 23: nekopass.v1.TLSServerConfig
-	(*ACMEChallenge)(nil),     // 24: nekopass.v1.ACMEChallenge
-	(*Probe)(nil),             // 25: nekopass.v1.Probe
+	(*RandomConfig)(nil),      // 22: nekopass.v1.RandomConfig
+	(*QUICPaddingConfig)(nil), // 23: nekopass.v1.QUICPaddingConfig
+	(*TLSClientConfig)(nil),   // 24: nekopass.v1.TLSClientConfig
+	(*TLSServerConfig)(nil),   // 25: nekopass.v1.TLSServerConfig
+	(*ACMEChallenge)(nil),     // 26: nekopass.v1.ACMEChallenge
+	(*Probe)(nil),             // 27: nekopass.v1.Probe
+	(*InterfaceTraffic)(nil),  // 28: nekopass.v1.InterfaceTraffic
 }
 var file_api_control_proto_depIdxs = []int32{
 	0,  // 0: nekopass.v1.AgentMessage.usage:type_name -> nekopass.v1.Usage
 	1,  // 1: nekopass.v1.AgentMessage.rule_usage:type_name -> nekopass.v1.RuleUsage
-	25, // 2: nekopass.v1.AgentMessage.probe:type_name -> nekopass.v1.Probe
+	27, // 2: nekopass.v1.AgentMessage.probe:type_name -> nekopass.v1.Probe
 	21, // 3: nekopass.v1.AgentMessage.ddns_status:type_name -> nekopass.v1.DDNSStatus
 	16, // 4: nekopass.v1.AgentMessage.update_status:type_name -> nekopass.v1.UpdateStatus
 	3,  // 5: nekopass.v1.AgentMessage.public_ip:type_name -> nekopass.v1.PublicIPStatus
 	19, // 6: nekopass.v1.AgentMessage.ip_recovery_status:type_name -> nekopass.v1.IPRecoveryStatus
-	22, // 7: nekopass.v1.Rule.tls:type_name -> nekopass.v1.TLSClientConfig
+	24, // 7: nekopass.v1.Rule.tls:type_name -> nekopass.v1.TLSClientConfig
 	7,  // 8: nekopass.v1.Rule.origin_tls:type_name -> nekopass.v1.OriginTLSConfig
 	6,  // 9: nekopass.v1.Rule.egress_peers:type_name -> nekopass.v1.EgressPeer
-	22, // 10: nekopass.v1.EgressPeer.tls:type_name -> nekopass.v1.TLSClientConfig
-	24, // 11: nekopass.v1.ACMEHTTPEndpoint.challenges:type_name -> nekopass.v1.ACMEChallenge
-	4,  // 12: nekopass.v1.ControlMessage.users:type_name -> nekopass.v1.UserPolicy
-	5,  // 13: nekopass.v1.ControlMessage.rules:type_name -> nekopass.v1.Rule
-	17, // 14: nekopass.v1.ControlMessage.node:type_name -> nekopass.v1.NodeConfig
-	0,  // 15: nekopass.v1.ControlMessage.acknowledged_usage:type_name -> nekopass.v1.Usage
-	10, // 16: nekopass.v1.ControlMessage.tunnel_links:type_name -> nekopass.v1.TunnelLink
-	11, // 17: nekopass.v1.ControlMessage.egress_rules:type_name -> nekopass.v1.EgressRule
-	15, // 18: nekopass.v1.ControlMessage.update:type_name -> nekopass.v1.UpdateRequest
-	14, // 19: nekopass.v1.ControlMessage.state_restore:type_name -> nekopass.v1.StateRestore
-	13, // 20: nekopass.v1.StateRestore.users:type_name -> nekopass.v1.UserStateBaseline
-	1,  // 21: nekopass.v1.StateRestore.rules:type_name -> nekopass.v1.RuleUsage
-	23, // 22: nekopass.v1.NodeConfig.tls:type_name -> nekopass.v1.TLSServerConfig
-	20, // 23: nekopass.v1.NodeConfig.ddns:type_name -> nekopass.v1.DDNSConfig
-	18, // 24: nekopass.v1.NodeConfig.ip_recovery:type_name -> nekopass.v1.IPRecoveryConfig
-	8,  // 25: nekopass.v1.NodeConfig.tls_inbounds:type_name -> nekopass.v1.SharedTLSInbound
-	9,  // 26: nekopass.v1.NodeConfig.acme_http:type_name -> nekopass.v1.ACMEHTTPEndpoint
-	24, // 27: nekopass.v1.TLSServerConfig.challenges:type_name -> nekopass.v1.ACMEChallenge
-	2,  // 28: nekopass.v1.Control.Connect:input_type -> nekopass.v1.AgentMessage
-	12, // 29: nekopass.v1.Control.Connect:output_type -> nekopass.v1.ControlMessage
-	29, // [29:30] is the sub-list for method output_type
-	28, // [28:29] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	22, // 10: nekopass.v1.Rule.random:type_name -> nekopass.v1.RandomConfig
+	24, // 11: nekopass.v1.EgressPeer.tls:type_name -> nekopass.v1.TLSClientConfig
+	22, // 12: nekopass.v1.EgressPeer.random:type_name -> nekopass.v1.RandomConfig
+	26, // 13: nekopass.v1.ACMEHTTPEndpoint.challenges:type_name -> nekopass.v1.ACMEChallenge
+	4,  // 14: nekopass.v1.ControlMessage.users:type_name -> nekopass.v1.UserPolicy
+	5,  // 15: nekopass.v1.ControlMessage.rules:type_name -> nekopass.v1.Rule
+	17, // 16: nekopass.v1.ControlMessage.node:type_name -> nekopass.v1.NodeConfig
+	0,  // 17: nekopass.v1.ControlMessage.acknowledged_usage:type_name -> nekopass.v1.Usage
+	10, // 18: nekopass.v1.ControlMessage.tunnel_links:type_name -> nekopass.v1.TunnelLink
+	11, // 19: nekopass.v1.ControlMessage.egress_rules:type_name -> nekopass.v1.EgressRule
+	15, // 20: nekopass.v1.ControlMessage.update:type_name -> nekopass.v1.UpdateRequest
+	14, // 21: nekopass.v1.ControlMessage.state_restore:type_name -> nekopass.v1.StateRestore
+	13, // 22: nekopass.v1.StateRestore.users:type_name -> nekopass.v1.UserStateBaseline
+	1,  // 23: nekopass.v1.StateRestore.rules:type_name -> nekopass.v1.RuleUsage
+	25, // 24: nekopass.v1.NodeConfig.tls:type_name -> nekopass.v1.TLSServerConfig
+	20, // 25: nekopass.v1.NodeConfig.ddns:type_name -> nekopass.v1.DDNSConfig
+	18, // 26: nekopass.v1.NodeConfig.ip_recovery:type_name -> nekopass.v1.IPRecoveryConfig
+	8,  // 27: nekopass.v1.NodeConfig.tls_inbounds:type_name -> nekopass.v1.SharedTLSInbound
+	9,  // 28: nekopass.v1.NodeConfig.acme_http:type_name -> nekopass.v1.ACMEHTTPEndpoint
+	22, // 29: nekopass.v1.NodeConfig.random:type_name -> nekopass.v1.RandomConfig
+	23, // 30: nekopass.v1.TLSClientConfig.quic_padding:type_name -> nekopass.v1.QUICPaddingConfig
+	26, // 31: nekopass.v1.TLSServerConfig.challenges:type_name -> nekopass.v1.ACMEChallenge
+	23, // 32: nekopass.v1.TLSServerConfig.quic_padding:type_name -> nekopass.v1.QUICPaddingConfig
+	28, // 33: nekopass.v1.Probe.network_counters:type_name -> nekopass.v1.InterfaceTraffic
+	2,  // 34: nekopass.v1.Control.Connect:input_type -> nekopass.v1.AgentMessage
+	12, // 35: nekopass.v1.Control.Connect:output_type -> nekopass.v1.ControlMessage
+	35, // [35:36] is the sub-list for method output_type
+	34, // [34:35] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_api_control_proto_init() }
@@ -3456,7 +3899,7 @@ func file_api_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_control_proto_rawDesc), len(file_api_control_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   26,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

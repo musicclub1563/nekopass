@@ -5,11 +5,11 @@ import PageShell from '../PageShell.vue'
 import {usePage} from '../page'
 import {api} from '../api'
 import {yuan,cycleName,dateText,openCheckout,type Checkout} from '../commerce'
-type Order={payment_method_name:string;can_pay:boolean;id:number;order_no:string;kind:string;plan_name:string;cycle:string;amount_cents:number;status:string;created_at:string;paid_at:string|null;snapshot:{expires_at?:string|null;next_reset_at?:string|null;note?:string}}
+type Order={payment_method_name:string;can_pay:boolean;id:number;order_no:string;kind:string;plan_name:string;cycle:string;amount_cents:number;status:string;created_at:string;paid_at:string|null;snapshot:{automatic?:boolean;expires_at?:string|null;next_reset_at?:string|null;note?:string}}
 const orders=ref<Order[]>([]),total=ref(0),page=ref(1),detail=ref<Order|null>(null),dialog=ref(false)
 const {me,loading,error,refresh}=usePage(async()=>{const data=await api<{items:Order[];total:number}>(`orders?page=${page.value}`);orders.value=data.items;total.value=data.total},{interval:15000})
 function show(o:Order){detail.value=o;dialog.value=true}
-function kind(o:Order){return o.kind==='rebate'?'邀请返利':o.kind==='recharge'?'余额充值':o.kind==='renewal'?'套餐续费':'套餐购买'}
+function kind(o:Order){if(o.kind==='renewal'&&o.snapshot?.automatic)return '自动续费';return o.kind==='rebate'?'邀请返利':o.kind==='recharge'?'余额充值':o.kind==='renewal'?'套餐续费':'套餐购买'}
 const returned=new URLSearchParams(location.search).has('payment'),paying=ref(0)
 async function pay(order:Order){if(paying.value)return;paying.value=order.id;try{const result=await api<{checkout:Checkout;status:string}>(`orders/${order.id}/pay`,'POST',{});if(result.status==='paid'){await refresh();ElMessage.success('充值订单已完成')}else openCheckout(result.checkout)}catch(e){ElMessage.error((e as Error).message)}finally{paying.value=0}}
 </script>

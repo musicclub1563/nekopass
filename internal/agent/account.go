@@ -18,6 +18,8 @@ const ReservationBlock int64 = 16 << 20
 var ErrQuota = errors.New("quota exhausted or no offline allowance")
 
 type Account struct {
+	weightCredit    int64
+	paidActive      atomic.Int64
 	mu              sync.Mutex
 	id              int64
 	disk            DiskUser
@@ -34,6 +36,10 @@ type Account struct {
 }
 
 func newAccount(id int64, d DiskUser, s *State) *Account {
+	if !d.Metered {
+		d.Charged = d.Traffic
+		d.Metered = true
+	}
 	return &Account{id: id, disk: d, state: s, limiter: rate.NewLimiter(1, BufferSize)}
 }
 func (a *Account) configure(p *pb.UserPolicy) error {
@@ -45,6 +51,7 @@ func (a *Account) configure(p *pb.UserPolicy) error {
 	if a.unlimitedMode != p.QuotaUnlimited {
 		a.credit = 0
 		a.unlimitedCredit = 0
+		a.weightCredit = 0
 	}
 	a.unlimitedMode = p.QuotaUnlimited
 	a.policy = p
@@ -79,7 +86,9 @@ func (a *Account) acquire() bool {
 		return false
 	}
 	a.active.Add(1)
-	a.wanted = time.Now()
+	if !a.policy.MeteringConfigured {
+		a.wanted = time.Now()
+	}
 	return true
 }
 
@@ -150,12 +159,21 @@ func (a *Account) take(ctx context.Context, n int) (int, error) {
 		}
 	}
 }
-func (a *Account) count(n int) { a.mu.Lock(); a.disk.Traffic += int64(n); a.mu.Unlock() }
+func (a *Account) count(n int) {
+	a.mu.Lock()
+	a.disk.Traffic += int64(n)
+	a.disk.Charged += int64(n)
+	a.mu.Unlock()
+}
 
 // Caller holds mu through the atomic checkpoint so a reservation cannot be overwritten.
 func (a *Account) report() (*pb.Usage, bool, error) {
 	// Release only durable, unused allowance. Reserved blocks never re-enter the global pool.
-	wanted := a.validLocked() && (a.active.Load() > 0 || time.Since(a.wanted) < 10*time.Second)
+	active := a.active.Load()
+	if a.policy != nil && a.policy.MeteringConfigured {
+		active = a.paidActive.Load()
+	}
+	wanted := a.validLocked() && (active > 0 || time.Since(a.wanted) < 10*time.Second)
 	unlimited := a.policy != nil && a.policy.QuotaUnlimited
 	if unlimited || (!wanted && time.Since(a.wanted) > 30*time.Second) {
 		available := a.disk.Issued - a.disk.Spent - a.disk.Released
@@ -163,7 +181,7 @@ func (a *Account) report() (*pb.Usage, bool, error) {
 			a.disk.Released += available
 		}
 	}
-	return &pb.Usage{UserId: a.id, Spent: a.disk.Spent, Released: a.disk.Released, Traffic: a.disk.Traffic, UnlimitedSpent: a.disk.UnlimitedSpent, QuotaUnlimited: unlimited, QuotaEpoch: a.disk.Epoch}, wanted && !unlimited, nil
+	return &pb.Usage{UserId: a.id, Spent: a.disk.Spent, Released: a.disk.Released, Traffic: a.disk.Traffic, UnlimitedSpent: a.disk.UnlimitedSpent, QuotaUnlimited: unlimited, QuotaEpoch: a.disk.Epoch, ChargedBytes: a.disk.Charged}, wanted && !unlimited, nil
 }
 
 func (a *Account) addIP(ip string) bool {

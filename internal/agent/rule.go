@@ -134,7 +134,9 @@ func (r *ruleRuntime) dialRoute(ctx context.Context) (net.Conn, func(), string, 
 				c, e = d.DialContext(dialCtx, "tcp", r.targets[i])
 			}
 		} else {
-			if tunnel.H2(r.policy.TunnelProtocol) {
+			if tunnel.H3(r.policy.TunnelProtocol) {
+				c, e = r.h2.h3.Dial(dialCtx, ctx, r.policy, r.targets[i], false, nil)
+			} else if tunnel.H2(r.policy.TunnelProtocol) {
 				if r.h2 == nil {
 					r.releaseTarget(i)
 					return nil, nil, "", errors.New("TLS transport unavailable")
@@ -145,6 +147,9 @@ func (r *ruleRuntime) dialRoute(ctx context.Context) (net.Conn, func(), string, 
 			}
 		}
 		if e == nil {
+			if r.policy.EgressGroupId == 0 {
+				c = &billedConn{Conn: c, rate: ruleRate(r.policy)}
+			}
 			return c, func() {
 				if releaseExit != nil {
 					releaseExit()

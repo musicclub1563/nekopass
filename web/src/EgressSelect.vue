@@ -6,8 +6,8 @@ const emit=defineEmits<{'update:modelValue':[value:string];clear:[]}>()
 </script>
 <template>
  <el-select :model-value="modelValue" @update:model-value="emit('update:modelValue',$event)" @clear="emit('clear')" :disabled="disabled" :clearable="clearable" filterable :placeholder="placeholder||'请选择出口节点或节点组'">
-  <template #label="{label,value}"><span class="egress-choice" :class="value?.startsWith('group:')?'is-group':'is-node'"><Icon :name="value?.startsWith('group:')?'folder':'node'"/><span>{{label}}</span></span></template>
-  <el-option v-for="o in options" :key="o.value" :value="o.value" :label="o.name" :aria-label="o.name"><span class="egress-choice" :class="o.kind==='group'?'is-group':'is-node'"><Icon :name="o.kind==='group'?'folder':'node'"/><span>{{o.name}}</span><small>{{o.kind==='group'?'节点组':o.kind==='node'?'单个节点':'直转'}}</small></span></el-option>
+  <template #label="{label,value}"><span class="egress-choice" :class="value?.startsWith('group:')?'is-group':'is-node'"><Icon :name="value?.startsWith('group:')?'folder':'node'"/><span>{{label}}</span><small v-if="options.find(o=>o.value===value)?.hint">{{options.find(o=>o.value===value)?.hint}}</small></span></template>
+  <el-option v-for="o in options" :key="o.value" :value="o.value" :label="o.name" :aria-label="o.name"><span class="egress-choice" :class="o.kind==='group'?'is-group':'is-node'"><Icon :name="o.kind==='group'?'folder':'node'"/><span>{{o.name}}</span><small v-if="o.hint">{{o.hint}}</small><small>{{o.kind==='group'?'节点组':o.kind==='node'?'单个节点':'直转'}}</small></span></el-option>
  </el-select>
 </template>
 <style scoped>

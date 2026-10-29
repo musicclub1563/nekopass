@@ -34,13 +34,17 @@ func (e *Engine) restoreState(c *pb.ControlMessage) error {
 	users := map[int64]DiskUser{}
 	counts := map[int64]int64{}
 	for _, v := range c.StateRestore.Users {
-		if v.UserId <= 0 || v.QuotaEpoch < 0 || v.Issued < 0 || v.Spent < 0 || v.Released < 0 || v.UnlimitedSpent < 0 || v.Traffic < 0 || v.Spent > v.Issued || v.Released > v.Issued-v.Spent || v.Spent > math.MaxInt64-v.UnlimitedSpent || v.Traffic > v.Spent+v.UnlimitedSpent {
+		charged := v.Traffic
+		if v.MeteringConfigured {
+			charged = v.ChargedBytes
+		}
+		if v.UserId <= 0 || v.QuotaEpoch < 0 || v.Issued < 0 || v.Spent < 0 || v.Released < 0 || v.UnlimitedSpent < 0 || v.Traffic < 0 || v.Spent > v.Issued || v.Released > v.Issued-v.Spent || v.Spent > math.MaxInt64-v.UnlimitedSpent || charged < 0 || charged > v.Spent+v.UnlimitedSpent {
 			return errors.New("invalid restored usage")
 		}
 		if _, ok := users[v.UserId]; ok {
 			return errors.New("duplicate restored user")
 		}
-		users[v.UserId] = DiskUser{Epoch: v.QuotaEpoch, Issued: v.Issued, Spent: v.Spent, Released: v.Released, Traffic: v.Traffic, UnlimitedSpent: v.UnlimitedSpent}
+		users[v.UserId] = DiskUser{Epoch: v.QuotaEpoch, Issued: v.Issued, Spent: v.Spent, Released: v.Released, Traffic: v.Traffic, UnlimitedSpent: v.UnlimitedSpent, Charged: charged, Metered: true}
 	}
 	for _, v := range c.StateRestore.Rules {
 		if v.RuleId <= 0 || v.Traffic < 0 {

@@ -18,8 +18,9 @@ type UserInput struct {
 func (s *Server) users(w http.ResponseWriter, r *http.Request) {
 	u := current(r)
 	rows, e := s.Pool.Query(r.Context(), `SELECT u.id,u.username,u.is_admin,u.account_enabled AS enabled,u.plan_id,u.plan_name,u.plan_enabled,u.plan_started_at,u.expires_at,u.next_reset_at,u.quota_epoch,u.subscription_managed,COALESCE((SELECT balance_cents FROM wallet_accounts WHERE user_id=u.id),0) AS balance_cents,u.speed_bps/125000 AS speed_mbps,u.quota_bytes,u.max_rules,u.max_connections,u.ip_limit,u.rule_speed_bps/125000 AS rule_speed_mbps,u.rule_ip_limit,u.rule_connection_limit,
- u.traffic_base_bytes+COALESCE((SELECT sum(traffic) FROM current_grants WHERE user_id=u.id),0)::bigint AS traffic_bytes,
- u.traffic_base_bytes+COALESCE((SELECT sum(spent+unlimited_spent) FROM current_grants WHERE user_id=u.id),0)::bigint AS charged_bytes,
+ u.traffic_base_bytes+COALESCE((SELECT sum(charged_bytes) FROM current_grants WHERE user_id=u.id),0)::bigint AS traffic_bytes,
+ u.traffic_base_bytes+COALESCE((SELECT sum(charged_bytes) FROM current_grants WHERE user_id=u.id),0)::bigint AS charged_bytes,
+ u.actual_traffic_base_bytes+COALESCE((SELECT sum(traffic) FROM current_grants WHERE user_id=u.id),0)::bigint AS actual_traffic_bytes,
  u.traffic_base_bytes+COALESCE((SELECT sum(issued-released+unlimited_spent) FROM current_grants WHERE user_id=u.id),0)::bigint AS allocated_bytes,u.resources_revision,
  COALESCE((SELECT array_agg(group_id ORDER BY group_id) FROM user_node_groups WHERE user_id=u.id),'{}') AS node_group_ids,
  COALESCE((SELECT array_agg(node_id) FROM user_nodes WHERE user_id=u.id),'{}') AS node_ids,

@@ -138,3 +138,17 @@ func TestEgressGroupAuthorizationDistributionAndBatch(t *testing.T) {
 		t.Fatal("group grant revocation bypassed")
 	}
 }
+
+func TestGroupFinalSnapshotReleasesDraftReferences(t *testing.T) {
+	r := &pb.Rule{Id: 1, EgressGroupId: 3, Enabled: true}
+	p := &pb.Rule{Id: 1, EgressNodeId: 4, Enabled: true, Targets: []string{"draft-only-target"}}
+	backing := []*pb.Rule{r, p}
+	out := &pb.ControlMessage{Rules: backing}
+	finishGroupDrafts(out, []groupRuleDraft{{rule: r, peer: p, weight: 1}}, 25, 1)
+	if len(out.Rules) != 1 || len(out.Rules[0].EgressPeers) != 1 || out.Rules[0].EgressPeers[0].NodeId != 4 {
+		t.Fatal("group route changed")
+	}
+	if backing[1] != nil || cap(out.Rules) > 1 {
+		t.Fatal("snapshot retains temporary candidate rules")
+	}
+}
