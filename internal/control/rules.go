@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/nekopass/nekopass/internal/networkpolicy"
+	pb "github.com/nekopass/nekopass/internal/protocol"
 	"github.com/nekopass/nekopass/internal/store"
 	"github.com/nekopass/nekopass/internal/tlsinbound"
 	"github.com/nekopass/nekopass/internal/tunnel"
@@ -194,9 +195,11 @@ func putRule(ctx context.Context, tx pgx.Tx, actor store.User, id int64, in Rule
 			return 0, errors.New("目标 IP 位于管理员禁止的网段")
 		}
 	}
+	var oldNodeID int64
+	var oldProtocol string
 	if id != 0 {
 		var owner int64
-		if e := tx.QueryRow(ctx, "SELECT user_id FROM rules WHERE id=$1 AND ($2 OR user_id=$3) FOR UPDATE", id, actor.IsAdmin, actor.ID).Scan(&owner); e != nil {
+		if e := tx.QueryRow(ctx, "SELECT user_id,node_id,protocol FROM rules WHERE id=$1 AND ($2 OR user_id=$3) FOR UPDATE", id, actor.IsAdmin, actor.ID).Scan(&owner, &oldNodeID, &oldProtocol); e != nil {
 			return 0, errors.New("规则不存在或无权操作")
 		}
 		if owner != in.UserID {
@@ -221,11 +224,17 @@ func putRule(ctx context.Context, tx pgx.Tx, actor store.User, id int64, in Rule
 	if !allowed {
 		return 0, errors.New("用户没有此入口节点的权限")
 	}
-	if e := tx.QueryRow(ctx, "SELECT ingress_enabled FROM nodes WHERE id=$1", in.NodeID).Scan(&allowed); e != nil {
+	var denyUDP bool
+	if e := tx.QueryRow(ctx, "SELECT ingress_enabled,deny_udp_ingress_creation FROM nodes WHERE id=$1", in.NodeID).Scan(&allowed, &denyUDP); e != nil {
 		return 0, e
 	}
 	if !allowed {
 		return 0, errors.New("此节点未启用入口功能，只能选择其他入口")
+	}
+	// This is an admission policy: existing UDP rules on this ingress remain usable.
+	// Copies, TCP-to-UDP changes and moves from another ingress need new admission.
+	if denyUDP && in.Protocol == "udp" && !(id != 0 && oldNodeID == in.NodeID && oldProtocol == "udp") {
+		return 0, errors.New("此节点禁止创建新的 UDP 入站规则，请选择其他入口")
 	}
 	if in.EgressGroupID != 0 {
 		if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_node_groups ug JOIN node_groups g ON g.id=ug.group_id AND g.enabled JOIN node_group_members m ON m.group_id=g.id AND m.role<>'disabled' JOIN nodes n ON n.id=m.node_id AND n.enabled AND n.tunnel_exit_enabled JOIN node_tunnel_links l ON l.egress_node_id=n.id AND l.ingress_node_id=$2 JOIN user_nodes un ON un.node_id=n.id AND un.user_id=$1 WHERE ug.user_id=$1 AND ug.group_id=$3 AND n.id<>$2 AND ($4='udp' OR n.tunnel_protocol NOT IN ('plain_udp','dtls_udp','random_udp')))`, in.UserID, in.NodeID, in.EgressGroupID, in.Protocol).Scan(&allowed); e != nil {
@@ -361,11 +370,11 @@ func (s *Server) rules(w http.ResponseWriter, r *http.Request) {
  CASE WHEN NOT r.enabled THEN 'disabled' WHEN NOT u.account_enabled THEN 'user_disabled' WHEN u.plan_id IS NULL THEN 'no_plan' WHEN NOT u.plan_enabled THEN 'plan_disabled' WHEN u.expires_at<=now() THEN 'expired' WHEN NOT n.ingress_enabled OR NOT EXISTS(SELECT 1 FROM user_nodes un WHERE un.user_id=r.user_id AND un.node_id=r.node_id) OR (r.egress_node_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM user_nodes un WHERE un.user_id=r.user_id AND un.node_id=r.egress_node_id)) THEN 'unauthorized'
  WHEN r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o WHERE o.rule_id=r.id) THEN 'unauthorized'
  WHEN r.egress_group_id IS NOT NULL AND n.protocol_version<24 THEN 'upgrade_required'
- WHEN r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND x.protocol_version>=24) THEN 'upgrade_required'
+ WHEN r.egress_group_id IS NOT NULL AND gc.compatible=0 THEN 'upgrade_required'
+ WHEN r.egress_group_id IS NOT NULL AND gc.usable=0 AND gc.online_compatible>0 THEN 'bandwidth_required'
  WHEN n.protocol_version<25 AND r.egress_group_id IS NULL AND n.ingress_rate+COALESCE(en.egress_rate,0)<>10000 THEN 'upgrade_required'
- WHEN n.protocol_version<25 AND r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND n.ingress_rate+x.egress_rate=10000) THEN 'upgrade_required'
- WHEN u.quota_bytes>=0 AND (r.egress_group_id IS NULL AND n.ingress_rate+COALESCE(en.egress_rate,0)>0 OR r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND n.ingress_rate+x.egress_rate=0)) AND (u.quota_bytes<=u.traffic_base_bytes+COALESCE((SELECT sum(charged_bytes) FROM current_grants WHERE user_id=u.id),0) OR u.quota_bytes<u.traffic_base_bytes+COALESCE((SELECT sum(issued-released+unlimited_spent) FROM current_grants WHERE user_id=u.id),0)) THEN 'quota_exhausted'
- WHEN r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND x.protocol_version>=24 AND x.last_seen>now()-interval '12 seconds') THEN 'offline'
+ WHEN u.quota_bytes>=0 AND (r.egress_group_id IS NULL AND n.ingress_rate+COALESCE(en.egress_rate,0)>0 OR r.egress_group_id IS NOT NULL AND gc.free_usable=0) AND (u.quota_bytes<=u.traffic_base_bytes+COALESCE((SELECT sum(charged_bytes) FROM current_grants WHERE user_id=u.id),0) OR u.quota_bytes<u.traffic_base_bytes+COALESCE((SELECT sum(issued-released+unlimited_spent) FROM current_grants WHERE user_id=u.id),0)) THEN 'quota_exhausted'
+ WHEN r.egress_group_id IS NOT NULL AND gc.online_usable=0 THEN 'offline'
 	 WHEN n.last_seen IS NULL OR n.last_seen<now()-interval '12 seconds' OR (en.id IS NOT NULL AND (en.last_seen IS NULL OR en.last_seen<now()-interval '12 seconds')) THEN 'offline'
 	 WHEN $3 AND (n.protocol_version<14 OR (en.id IS NOT NULL AND en.protocol_version<14)) THEN 'upgrade_required'
  WHEN (r.tls_inbound_id IS NOT NULL AND n.protocol_version<21) OR (r.origin_tls->>'enabled'='true' AND n.protocol_version<20) THEN 'upgrade_required'
@@ -373,8 +382,11 @@ func (s *Server) rules(w http.ResponseWriter, r *http.Request) {
  WHEN r.tls_inbound_id IS NOT NULL AND ti.config->>'enabled'<>'true' THEN 'inbound_disabled'
  WHEN (r.proxy_accept<>'off' OR ti.config->>'proxy_accept'='auto') AND $4 THEN 'proxy_untrusted'
  WHEN en.tunnel_protocol='tls_tcp' AND en.tls_config->>'padding_enabled'='true' AND (n.protocol_version<23 OR en.protocol_version<23) THEN 'upgrade_required'
+ WHEN (en.tunnel_protocol IN ('random_tcp','random_h2','random_udp','dtls_udp') OR en.tunnel_protocol='tls_tcp' AND en.tls_config->>'padding_enabled'='true' AND en.mux_config->>'enabled'='true') AND (n.protocol_version<$5 OR en.protocol_version<$5) THEN 'upgrade_required'
+ WHEN en.mux_config->>'enabled'='true' AND en.tunnel_protocol IN ('plain_tcp','tls_tcp','random_tcp','plain_udp','dtls_udp','random_udp') AND (n.protocol_version<34 OR en.protocol_version<34) THEN 'upgrade_required'
+ WHEN en.brutal_enabled AND en.tunnel_protocol IN ('tls_h3','plain_udp','dtls_udp','random_udp') AND (n.protocol_version<32 OR en.protocol_version<32) THEN 'upgrade_required'
+ WHEN en.brutal_enabled AND en.tunnel_protocol IN ('tls_h3','plain_udp','dtls_udp','random_udp') AND (n.bandwidth_up_mbps=0 OR n.bandwidth_down_mbps=0 OR en.bandwidth_up_mbps=0 OR en.bandwidth_down_mbps=0) THEN 'bandwidth_required'
  WHEN en.tunnel_protocol='tls_h3' AND en.tls_config->'quic_padding'->>'enabled'='true' AND (n.protocol_version<29 OR en.protocol_version<29) THEN 'upgrade_required'
- WHEN r.egress_group_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE o.rule_id=r.id AND (x.tunnel_protocol<>'tls_h3' OR x.tls_config->'quic_padding'->>'enabled' IS DISTINCT FROM 'true' OR (n.protocol_version>=29 AND x.protocol_version>=29))) THEN 'upgrade_required'
  WHEN en.tunnel_protocol='tls_h3' AND (n.protocol_version<28 OR en.protocol_version<28) THEN 'upgrade_required'
  WHEN en.tunnel_protocol='random_udp' AND (n.protocol_version<27 OR en.protocol_version<27) THEN 'upgrade_required'
  WHEN en.tunnel_protocol IN ('random_tcp','random_h2') AND (n.protocol_version<26 OR en.protocol_version<26) THEN 'upgrade_required'
@@ -384,7 +396,27 @@ func (s *Server) rules(w http.ResponseWriter, r *http.Request) {
 	 WHEN en.tunnel_protocol='tls_h2' AND (n.protocol_version<11 OR en.protocol_version<11) THEN 'upgrade_required'
  WHEN en.tunnel_protocol IN ('tls_tcp','plain_h2') AND (n.protocol_version<13 OR en.protocol_version<13) THEN 'upgrade_required'
 	 WHEN n.sync_error<>'' OR COALESCE(en.sync_error,'')<>'' THEN 'failed' WHEN n.applied_revision<r.config_revision OR (en.id IS NOT NULL AND en.applied_revision<r.config_revision) THEN 'pending' ELSE 'active' END AS status
-	 FROM rules r JOIN user_entitlements u ON u.id=r.user_id JOIN nodes n ON n.id=r.node_id LEFT JOIN nodes en ON en.id=r.egress_node_id LEFT JOIN node_groups eg ON eg.id=r.egress_group_id LEFT JOIN node_tls_inbounds ti ON ti.id=r.tls_inbound_id LEFT JOIN rule_groups g ON g.id=r.group_id WHERE $1 OR r.user_id=$2 ORDER BY r.id DESC`, u.IsAdmin, u.ID, len(settings.TargetDenyCIDRs) > 0, len(settings.ProxyTrustedCIDRs) == 0)
+	 FROM rules r JOIN user_entitlements u ON u.id=r.user_id JOIN nodes n ON n.id=r.node_id LEFT JOIN nodes en ON en.id=r.egress_node_id LEFT JOIN node_groups eg ON eg.id=r.egress_group_id LEFT JOIN node_tls_inbounds ti ON ti.id=r.tls_inbound_id LEFT JOIN rule_groups g ON g.id=r.group_id
+ LEFT JOIN LATERAL (
+  SELECT count(*) FILTER(WHERE c.compatible) AS compatible,
+   count(*) FILTER(WHERE c.compatible AND c.last_seen>now()-interval '12 seconds') AS online_compatible,
+   count(*) FILTER(WHERE c.compatible AND c.bandwidth_ok) AS usable,
+   count(*) FILTER(WHERE c.compatible AND c.bandwidth_ok AND c.last_seen>now()-interval '12 seconds') AS online_usable,
+   count(*) FILTER(WHERE c.compatible AND c.bandwidth_ok AND c.rate=0) AS free_usable
+  FROM (
+   SELECT x.last_seen,n.ingress_rate+x.egress_rate AS rate,
+    (n.protocol_version>=24 AND x.protocol_version>=24
+     AND (n.protocol_version>=25 OR n.ingress_rate+x.egress_rate=10000)
+     AND (x.tunnel_protocol<>'tls_h3' OR n.protocol_version>=28 AND x.protocol_version>=28)
+     AND (x.tunnel_protocol<>'tls_h3' OR x.tls_config->'quic_padding'->>'enabled' IS DISTINCT FROM 'true' OR n.protocol_version>=29 AND x.protocol_version>=29)
+     AND (x.tunnel_protocol NOT IN ('random_tcp','random_h2','random_udp','dtls_udp') AND NOT (x.tunnel_protocol='tls_tcp' AND COALESCE(x.tls_config->>'padding_enabled','false')='true' AND COALESCE(x.mux_config->>'enabled','false')='true') OR n.protocol_version>=$5 AND x.protocol_version>=$5)
+     AND (x.mux_config->>'enabled' IS DISTINCT FROM 'true' OR x.tunnel_protocol NOT IN ('plain_tcp','tls_tcp','random_tcp','plain_udp','dtls_udp','random_udp') OR n.protocol_version>=34 AND x.protocol_version>=34)
+     AND (NOT x.brutal_enabled OR x.tunnel_protocol NOT IN ('tls_h3','plain_udp','dtls_udp','random_udp') OR n.protocol_version>=32 AND x.protocol_version>=32)) AS compatible,
+    (NOT x.brutal_enabled OR x.tunnel_protocol NOT IN ('tls_h3','plain_udp','dtls_udp','random_udp') OR n.bandwidth_up_mbps>0 AND n.bandwidth_down_mbps>0 AND x.bandwidth_up_mbps>0 AND x.bandwidth_down_mbps>0) AS bandwidth_ok
+   FROM rule_outbound_routes o JOIN nodes x ON x.id=o.egress_node_id WHERE r.egress_group_id IS NOT NULL AND o.rule_id=r.id
+  ) c
+ ) gc ON true
+ WHERE $1 OR r.user_id=$2 ORDER BY r.id DESC`, u.IsAdmin, u.ID, len(settings.TargetDenyCIDRs) > 0, len(settings.ProxyTrustedCIDRs) == 0, pb.EncryptedTunnelVersion)
 	if e != nil {
 		s.dbError(w, e)
 		return

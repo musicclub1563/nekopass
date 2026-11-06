@@ -57,11 +57,14 @@ func dialDatagramTunnel(dialCtx, lifetime context.Context, r *pb.Rule, target st
 		return h2.h3.Dial(dialCtx, lifetime, r, target, true, queued)
 	}
 	if tunnel.UDP(r.TunnelProtocol) {
-		if tunnel.Random(r.TunnelProtocol) {
+		if tunnel.Random(r.TunnelProtocol) || r.Mux.GetEnabled() {
 			if h2 == nil {
 				return nil, errors.New("UDP transport unavailable")
 			}
 			return h2.randomUDP.Dial(dialCtx, lifetime, r, target, queued)
+		}
+		if h2 != nil {
+			return dialNativeDatagram(dialCtx, lifetime, r, target, queued, h2.h3.brutalBudget)
 		}
 		return dialNativeDatagram(dialCtx, lifetime, r, target, queued)
 	}
@@ -74,6 +77,9 @@ func dialDatagramTunnel(dialCtx, lifetime context.Context, r *pb.Rule, target st
 			return nil, err
 		}
 		return &framedDatagram{Conn: c}, nil
+	}
+	if r.Mux.GetEnabled() && h2 != nil {
+		return h2.rawMux.Dial(dialCtx, lifetime, r, target, true)
 	}
 	return dialRawDatagramTunnel(dialCtx, r, target)
 }

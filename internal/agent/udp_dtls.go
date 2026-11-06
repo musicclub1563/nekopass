@@ -17,11 +17,14 @@ type dtlsDatagram struct {
 	next            atomic.Uint32
 	parts           map[uint32]*udpParts
 	queued          *atomic.Int64
+	outer           *nativePeer
 }
 
-func newDTLSDatagram(c net.Conn, queued *atomic.Int64) *dtlsDatagram {
-	return &dtlsDatagram{Conn: c, parts: map[uint32]*udpParts{}, queued: queued}
+func newDTLSDatagram(c net.Conn, queued *atomic.Int64, outer *nativePeer) *dtlsDatagram {
+	return &dtlsDatagram{Conn: c, parts: map[uint32]*udpParts{}, queued: queued, outer: outer}
 }
+
+func (c *dtlsDatagram) wireBytesSent() uint64 { return c.outer.wireBytesSent() }
 func (c *dtlsDatagram) Write(b []byte) (int, error) {
 	if len(b) > maxDatagram {
 		return 0, errors.New("DTLS datagram too large")
@@ -62,7 +65,7 @@ func (c *dtlsDatagram) Read(b []byte) (int, error) {
 		now := time.Now()
 		for id, p := range c.parts {
 			if p.expires.Before(now) {
-				c.queued.Add(-int64(p.bytes))
+				c.queued.Add(-p.queued)
 				delete(c.parts, id)
 			}
 		}
@@ -82,16 +85,18 @@ func (c *dtlsDatagram) Read(b []byte) (int, error) {
 		if len(parts.fragments) != count || parts.fragments[index] != nil || parts.bytes+n-8 > maxDatagram {
 			continue
 		}
-		if c.queued.Add(int64(n-8)) > maxQueuedUDPBytes {
-			c.queued.Add(-int64(n - 8))
+		charge := udpQueueCharge(n - 8)
+		if c.queued.Add(charge) > maxQueuedUDPBytes {
+			c.queued.Add(-charge)
 			continue
 		}
 		parts.fragments[index] = append([]byte{}, record[8:n]...)
 		parts.bytes += n - 8
+		parts.queued += charge
 		parts.seen++
 		if parts.seen == count {
 			delete(c.parts, id)
-			c.queued.Add(-int64(parts.bytes))
+			c.queued.Add(-parts.queued)
 			if parts.bytes > len(b) {
 				return 0, errors.New("DTLS receive buffer too small")
 			}
@@ -107,7 +112,7 @@ func (c *dtlsDatagram) Close() error {
 	err := c.Conn.Close()
 	c.readMu.Lock()
 	for _, p := range c.parts {
-		c.queued.Add(-int64(p.bytes))
+		c.queued.Add(-p.queued)
 	}
 	c.parts = map[uint32]*udpParts{}
 	c.readMu.Unlock()
