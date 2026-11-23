@@ -19,9 +19,20 @@ var proxySignature = []byte("\r\n\r\n\x00\r\nQUIT\n")
 type bufferedConn struct {
 	net.Conn
 	reader *bufio.Reader
+	prefix []byte
 }
 
-func (c *bufferedConn) Read(p []byte) (int, error) { return c.reader.Read(p) }
+func (c *bufferedConn) Read(p []byte) (int, error) {
+	if len(c.prefix) != 0 {
+		n := copy(p, c.prefix)
+		c.prefix = c.prefix[n:]
+		return n, nil
+	}
+	if c.reader != nil {
+		return c.reader.Read(p)
+	}
+	return c.Conn.Read(p)
+}
 func (c *bufferedConn) CloseWrite() error {
 	if v, ok := c.Conn.(interface{ CloseWrite() error }); ok {
 		return v.CloseWrite()
@@ -150,7 +161,7 @@ func readProxy(c net.Conn, mode string, trusted []string) (net.Conn, proxyAddres
 	}
 	return wrapped, a, nil
 }
-func writeProxy(c net.Conn, mode string, a proxyAddresses) error {
+func writeProxy(c net.Conn, mode string, a proxyAddresses, nyanpassCompat bool) error {
 	if mode == "" || mode == "off" {
 		return nil
 	}
@@ -173,11 +184,20 @@ func writeProxy(c net.Conn, mode string, a proxyAddresses) error {
 			family = 0x11
 			length = 12
 		}
+		dstPort := a.dst.Port()
+		if nyanpassCompat {
+			if src.Is4() {
+				dst = netip.IPv4Unspecified()
+			} else {
+				dst = netip.IPv6Unspecified()
+			}
+			dstPort = 0
+		}
 		data = append(data, 0x21, family, 0, byte(length))
 		data = append(data, src.AsSlice()...)
 		data = append(data, dst.AsSlice()...)
 		data = binary.BigEndian.AppendUint16(data, a.src.Port())
-		data = binary.BigEndian.AppendUint16(data, a.dst.Port())
+		data = binary.BigEndian.AppendUint16(data, dstPort)
 	} else {
 		return errors.New("invalid proxy mode")
 	}

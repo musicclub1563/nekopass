@@ -73,6 +73,7 @@ type Engine struct {
 	challengeServers map[int32]*http.Server
 	ipRecoveryConfig *pb.IPRecoveryConfig
 	ipRecoveryCancel context.CancelFunc
+	ipRecoveryDone   <-chan struct{}
 	ipRecoveryStatus atomic.Pointer[pb.IPRecoveryStatus]
 	ipRecoveryAPI    func() iprecovery.API
 	ipRecoveryProbe  func(context.Context, string) (bool, error)
@@ -387,7 +388,7 @@ func (e *Engine) forwardPrepared(l *listener, client net.Conn, addresses proxyAd
 	rate := connectionRate(target, l.rule)
 	defer a.beginMeter(rate)()
 	ctx = context.WithValue(ctx, meteringKey{}, rate)
-	if err = writeProxy(target, l.rule.ProxySend, addresses); err != nil {
+	if err = writeProxy(target, l.rule.ProxySend, addresses, e.node.Load().GetProxyNyanpassCompat()); err != nil {
 		target.Close()
 		return
 	}
@@ -472,31 +473,21 @@ func (e *Engine) forwardPrepared(l *listener, client net.Conn, addresses proxyAd
 type activityKey struct{}
 
 func copyData(ctx context.Context, dst, src net.Conn, a *Account, count *atomic.Int64, limits ...*rate.Limiter) error {
-	holder := buffers.Get().(*[]byte)
-	defer buffers.Put(holder)
-	buf := *holder
 	activity, _ := ctx.Value(activityKey{}).(*atomic.Int64)
 	rate, ok := ctx.Value(meteringKey{}).(int64)
 	if !ok {
 		rate = 10000
 	}
-	for {
-		if activity == nil {
-			_ = src.SetReadDeadline(time.Now().Add(5 * time.Minute))
-		}
-		n, readErr := src.Read(buf)
-		if n > 0 && activity != nil {
+	send := func(n int, write func(int) (int, error)) error {
+		if activity != nil {
 			activity.Store(time.Now().UnixNano())
 		}
-		for offset := 0; offset < n; {
-			reservation, err := a.takeTraffic(ctx, n-offset, rate)
-			size := 0
-			if reservation != nil {
-				size = reservation.n
-			}
+		for remaining := n; remaining > 0; {
+			reservation, err := a.takeTraffic(ctx, remaining, rate)
 			if err != nil {
 				return err
 			}
+			size := reservation.n
 			if err = a.limiter.WaitN(ctx, size); err != nil {
 				reservation.finish(0)
 				return err
@@ -510,13 +501,13 @@ func copyData(ctx context.Context, dst, src net.Conn, a *Account, count *atomic.
 				}
 			}
 			_ = dst.SetWriteDeadline(time.Now().Add(30 * time.Second))
-			written, err := dst.Write(buf[offset : offset+size])
+			written, err := write(size)
 			if written > 0 && activity != nil {
 				activity.Store(time.Now().UnixNano())
 			}
 			reservation.finish(written)
 			count.Add(int64(written))
-			offset += written
+			remaining -= written
 			if err != nil {
 				return err
 			}
@@ -524,16 +515,50 @@ func copyData(ctx context.Context, dst, src net.Conn, a *Account, count *atomic.
 				return io.ErrShortWrite
 			}
 		}
+		return nil
+	}
+	if activity != nil {
+		if handled, err := spliceStream(dst, src, send); handled {
+			if err == nil {
+				closeForwardWrite(dst)
+			}
+			return err
+		}
+	}
+	holder := buffers.Get().(*[]byte)
+	defer buffers.Put(holder)
+	buf := *holder
+	offset := 0
+	write := func(size int) (int, error) {
+		written, err := dst.Write(buf[offset : offset+size])
+		offset += written
+		return written, err
+	}
+	for {
+		if activity == nil {
+			_ = src.SetReadDeadline(time.Now().Add(5 * time.Minute))
+		}
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			offset = 0
+			if err := send(n, write); err != nil {
+				return err
+			}
+		}
 		if readErr != nil {
 			if errors.Is(readErr, io.EOF) {
-				if tcp, ok := dst.(interface{ CloseWrite() error }); ok {
-					_ = dst.SetWriteDeadline(time.Now().Add(5 * time.Second))
-					_ = tcp.CloseWrite()
-				}
+				closeForwardWrite(dst)
 				return nil
 			}
 			return readErr
 		}
+	}
+}
+
+func closeForwardWrite(dst net.Conn) {
+	if tcp, ok := dst.(interface{ CloseWrite() error }); ok {
+		_ = dst.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		_ = tcp.CloseWrite()
 	}
 }
 func (e *Engine) Report() (*pb.AgentMessage, error) {

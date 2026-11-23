@@ -7,7 +7,7 @@ on:
       version:
         description: 'Stable version tag (vX.Y.Z)'
         required: true
-        default: v0.19.4
+        default: v0.20.3
 permissions:
   contents: read
 concurrency:
@@ -45,20 +45,34 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Database, tests and dependencies
+      - name: Prepare PostgreSQL
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql
-          sudo systemctl start postgresql
-          sudo -u postgres createuser runner || sudo -u postgres psql -XAt -c "SELECT 1 FROM pg_roles WHERE rolname='runner'" | grep -qx 1
+          # ubuntu-24.04 includes PostgreSQL; avoid an unnecessary APT download.
+          command -v psql
+          command -v pg_isready
+          sudo systemctl start postgresql.service
+          for attempt in {1..30}; do
+            if pg_isready -h /var/run/postgresql -p 5432; then break; fi
+            sleep 1
+          done
+          release_role_exists=$(sudo -u postgres psql -XAt -c "SELECT 1 FROM pg_roles WHERE rolname='runner'")
+          if [ "$release_role_exists" != 1 ]; then
+            sudo -u postgres createuser runner
+          fi
           sudo -u postgres createdb -O runner nekopass_release_test
+      - name: Go tests and vet
+        run: |
           # Native ICMP tests use unprivileged ping sockets on this CI host.
           sudo sysctl -w 'net.ipv4.ping_group_range=0 2147483647'
           go test -race -p 1 ./...
           (cd third_party/quic-go && go test -race -p 1 ./...)
           go vet ./...
+      - name: Go vulnerability scan
+        run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           govulncheck ./...
+      - name: Frontend dependencies
+        run: |
           npm --prefix web ci
           npm --prefix web test
           npm --prefix web audit --audit-level=low

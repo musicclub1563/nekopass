@@ -26,18 +26,26 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-      - name: Go tests, vet and vulnerabilities
-        env:
-          NEKOPASS_TEST_DATABASE_URL: postgres://runner@/nekopass_ci_test?host=/var/run/postgresql&sslmode=disable
+      - name: Prepare PostgreSQL
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql
-          sudo systemctl start postgresql
+          # ubuntu-24.04 includes PostgreSQL; avoid an unnecessary APT download.
+          command -v psql
+          command -v pg_isready
+          sudo systemctl start postgresql.service
+          for attempt in {1..30}; do
+            if pg_isready -h /var/run/postgresql -p 5432; then break; fi
+            sleep 1
+          done
+          pg_isready -h /var/run/postgresql -p 5432
           audit_role_exists=$(sudo -u postgres psql -XAt -c "SELECT 1 FROM pg_roles WHERE rolname='runner'")
           if [ "$audit_role_exists" != 1 ]; then
             sudo -u postgres createuser runner
           fi
           sudo -u postgres createdb -O runner nekopass_ci_test
+      - name: Go tests and vet
+        env:
+          NEKOPASS_TEST_DATABASE_URL: postgres://runner@/nekopass_ci_test?host=/var/run/postgresql&sslmode=disable
+        run: |
           # Native ICMP tests use unprivileged ping sockets on this CI host.
           sudo sysctl -w 'net.ipv4.ping_group_range=0 2147483647'
           go test -race -p 1 ./...
@@ -45,6 +53,8 @@ jobs:
           go vet ./...
           go build -o .local/nekopass-startup-test ./cmd/nekopass
           python3 tests/panel_startup_test.py --binary .local/nekopass-startup-test
+      - name: Go vulnerability scan
+        run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           govulncheck ./...
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -63,6 +73,7 @@ jobs:
       - name: Documentation build and dependency audit
         run: |
           npm --prefix docs ci
+          npm --prefix docs test
           npm --prefix docs run typecheck
           npm --prefix docs run build
           npm --prefix docs audit --audit-level=low

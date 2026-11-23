@@ -193,6 +193,7 @@ message NodeConfig {
  bool brutal_enabled = 30;
  bool client_tcp_brutal_enabled = 31;
  MuxConfig mux = 32;
+ bool proxy_nyanpass_compat = 33;
 }
 
 message IPRecoveryConfig {
@@ -209,6 +210,8 @@ message IPRecoveryConfig {
  string instance_id = 11;
  bool static_ip = 12;
  int64 reset_sequence = 13;
+ string binding_mode = 14;
+ string profile_id = 15;
 }
 message IPRecoveryStatus {
  int64 generation = 1;
@@ -222,6 +225,9 @@ message IPRecoveryStatus {
  string old_ip = 9;
  string new_ip = 10;
  string error = 11;
+ string instance_id = 12;
+ string account_id = 13;
+ string region_name = 14;
 }
 
 message DDNSConfig {
